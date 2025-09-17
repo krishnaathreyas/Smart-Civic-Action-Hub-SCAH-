@@ -1,5 +1,8 @@
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
 import '../constants/app_constants.dart';
+import '../theme/app_theme.dart';
 
 class AppUtils {
   static String formatDate(DateTime date) {
@@ -28,9 +31,10 @@ class AppUtils {
   }
 
   static String getReputationTier(int points) {
-    for (var entry in AppConstants.reputationTiers.entries.reversed) {
-      if (points >= entry.value) {
-        return entry.key;
+    final entries = AppConstants.reputationTiers.entries.toList();
+    for (int i = entries.length - 1; i >= 0; i--) {
+      if (points >= entries[i].value) {
+        return entries[i].key;
       }
     }
     return 'Bronze';

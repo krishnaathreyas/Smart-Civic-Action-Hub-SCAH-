@@ -1,10 +1,11 @@
 // presentation/screens/report/report_detail_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/app_utils.dart';
-import '../../providers/report_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/report_provider.dart';
 
 class ReportDetailScreen extends StatefulWidget {
   final String reportId;
@@ -132,7 +133,9 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              report.location ?? 'No location provided',
+                              report.address.isNotEmpty
+                                  ? report.address
+                                  : 'No location provided',
                               style: const TextStyle(fontSize: 14),
                             ),
                           ),

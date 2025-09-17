@@ -1,4 +1,6 @@
 // data/models/report_model.dart
+import 'user_model.dart';
+
 class ReportModel {
   final String id;
   final String userId;
@@ -100,6 +102,20 @@ class ReportModel {
 
   String get displayStatus {
     if (isInGracePeriod) return 'Under Review';
-    return status.split('_').map((word) => word.capitalize()).join(' ');
+    return status
+        .split('_')
+        .map(
+          (word) => word.isEmpty
+              ? ''
+              : word[0].toUpperCase() + word.substring(1).toLowerCase(),
+        )
+        .join(' ');
+  }
+}
+
+// String extension for capitalize functionality
+extension StringExtension on String {
+  String capitalize() {
+    return isEmpty ? '' : this[0].toUpperCase() + substring(1).toLowerCase();
   }
 }

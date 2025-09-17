@@ -1,4 +1,6 @@
 // data/models/comment_model.dart
+import 'user_model.dart';
+
 class CommentModel {
   final String id;
   final String userId;
