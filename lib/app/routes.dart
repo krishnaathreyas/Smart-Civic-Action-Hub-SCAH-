@@ -61,7 +61,7 @@ class AppRouter {
         builder: (context, state) => const HomeScreen(),
         routes: [
           GoRoute(
-            path: '/report-detail/:id',
+            path: 'report-detail/:id', // ✅ FIXED (removed leading slash)
             name: 'report-detail',
             builder: (context, state) =>
                 ReportDetailScreen(reportId: state.pathParameters['id']!),
