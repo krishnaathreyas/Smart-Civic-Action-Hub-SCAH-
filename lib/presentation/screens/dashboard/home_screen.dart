@@ -2,14 +2,13 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+
 import '../../../core/theme/app_theme.dart';
-import '../../../core/constants/app_constants.dart';
-import '../../../core/utils/app_utils.dart';
-import '../../providers/report_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/location_provider.dart';
-import '../../widgets/report_card.dart';
+import '../../providers/report_provider.dart';
 import '../../widgets/filter_chips.dart';
+import '../../widgets/report_card.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -168,6 +167,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       color: Colors.white,
       padding: const EdgeInsets.all(16),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           // View Toggle
           Row(
@@ -226,16 +226,25 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
         return RefreshIndicator(
           onRefresh: () => reportProvider.loadReports(),
-          child: ListView.builder(
-            padding: const EdgeInsets.only(top: 8, bottom: 80),
-            itemCount: reports.length,
-            itemBuilder: (context, index) {
-              final report = reports[index];
-              return ReportCard(
-                report: report,
-                onTap: () => context.go('/home/report-detail/${report.id}'),
-              );
-            },
+          child: CustomScrollView(
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.only(top: 8, bottom: 80),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    if (index >= reports.length) return null;
+                    final report = reports[index];
+                    return Container(
+                      key: ValueKey('report-${report.id}'),
+                      child: ReportCard(
+                        report: report,
+                        onTap: () => context.go('/report-detail/${report.id}'),
+                      ),
+                    );
+                  }, childCount: reports.length),
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -297,7 +306,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildFAB() {
     return FloatingActionButton(
-      onPressed: () => context.go('/home/create-report'),
+      onPressed: () => context.go('/submit-report'),
       backgroundColor: AppTheme.primaryBlue,
       child: const Icon(Icons.add, color: Colors.white),
     );

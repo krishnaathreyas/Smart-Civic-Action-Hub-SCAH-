@@ -1,11 +1,12 @@
 // presentation/widgets/report_card.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../data/models/report_models.dart';
+
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/app_utils.dart';
-import '../providers/report_provider.dart';
+import '../../data/models/report_models.dart';
 import '../providers/auth_provider.dart';
+import '../providers/report_provider.dart';
 
 class ReportCard extends StatelessWidget {
   final ReportModel report;
@@ -26,6 +27,7 @@ class ReportCard extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header with status and urgency
@@ -160,14 +162,20 @@ class ReportCard extends StatelessWidget {
 
               // Images preview
               if (report.imageUrls.isNotEmpty) ...[
-                SizedBox(
-                  height: 60,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxHeight: 60,
+                    minHeight: 60,
+                  ),
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
+                    shrinkWrap: true,
                     itemCount: report.imageUrls.length > 3
                         ? 3
                         : report.imageUrls.length,
                     itemBuilder: (context, index) {
+                      if (index >= report.imageUrls.length)
+                        return const SizedBox.shrink();
                       return Container(
                         margin: const EdgeInsets.only(right: 8),
                         width: 60,
@@ -197,49 +205,56 @@ class ReportCard extends StatelessWidget {
               ],
 
               // Voting section
-              Row(
-                children: [
-                  // Upvotes
-                  _buildVoteButton(
-                    context,
-                    icon: Icons.thumb_up_outlined,
-                    count: report.upvotes,
-                    isUpvote: true,
-                    report: report,
-                  ),
+              IntrinsicHeight(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Vote buttons
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Upvotes
+                        _buildVoteButton(
+                          context,
+                          icon: Icons.thumb_up_outlined,
+                          count: report.upvotes,
+                          isUpvote: true,
+                          report: report,
+                        ),
 
-                  const SizedBox(width: 16),
+                        const SizedBox(width: 16),
 
-                  // Downvotes
-                  _buildVoteButton(
-                    context,
-                    icon: Icons.thumb_down_outlined,
-                    count: report.downvotes,
-                    isUpvote: false,
-                    report: report,
-                  ),
-
-                  const Spacer(),
-
-                  // Weighted score
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
+                        // Downvotes
+                        _buildVoteButton(
+                          context,
+                          icon: Icons.thumb_down_outlined,
+                          count: report.downvotes,
+                          isUpvote: false,
+                          report: report,
+                        ),
+                      ],
                     ),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryBlue.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      'Score: ${report.weightedScore.toStringAsFixed(1)}',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppTheme.primaryBlue,
-                        fontWeight: FontWeight.w600,
+
+                    // Weighted score
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryBlue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'Score: ${report.weightedScore.toStringAsFixed(1)}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppTheme.primaryBlue,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),
@@ -261,41 +276,48 @@ class ReportCard extends StatelessWidget {
         final hasVoted = userVote != null;
         final isCurrentVoteType = hasVoted && userVote.isUpvote == isUpvote;
 
-        return InkWell(
-          onTap: report.canVote
-              ? () => _handleVote(context, isUpvote, report, authProvider)
-              : null,
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: isCurrentVoteType
-                  ? (isUpvote ? AppTheme.successGreen : AppTheme.errorRed)
-                        .withOpacity(0.1)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  icon,
-                  size: 18,
-                  color: isCurrentVoteType
-                      ? (isUpvote ? AppTheme.successGreen : AppTheme.errorRed)
-                      : AppTheme.mediumGray,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  count.toString(),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: report.canVote
+                ? () => _handleVote(context, isUpvote, report, authProvider)
+                : null,
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 40, minHeight: 28),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: isCurrentVoteType
+                    ? (isUpvote ? AppTheme.successGreen : AppTheme.errorRed)
+                          .withOpacity(0.1)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    icon,
+                    size: 18,
                     color: isCurrentVoteType
                         ? (isUpvote ? AppTheme.successGreen : AppTheme.errorRed)
                         : AppTheme.mediumGray,
-                    fontWeight: isCurrentVoteType ? FontWeight.w600 : null,
                   ),
-                ),
-              ],
+                  const SizedBox(width: 4),
+                  Text(
+                    count.toString(),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: isCurrentVoteType
+                          ? (isUpvote
+                                ? AppTheme.successGreen
+                                : AppTheme.errorRed)
+                          : AppTheme.mediumGray,
+                      fontWeight: isCurrentVoteType ? FontWeight.w600 : null,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );

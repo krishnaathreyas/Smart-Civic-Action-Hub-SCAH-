@@ -1,11 +1,9 @@
 // presentation/screens/onboarding/welcome_screen.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../providers/auth_provider.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({Key? key}) : super(key: key);
@@ -19,6 +17,7 @@ class WelcomeScreen extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: SingleChildScrollView(
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 const SizedBox(height: 60),
 
@@ -69,7 +68,7 @@ class WelcomeScreen extends StatelessWidget {
                   textAlign: TextAlign.center,
                 ),
 
-                const Spacer(),
+                const SizedBox(height: 40),
 
                 // Feature Highlights
                 _buildFeatureCard(
@@ -103,22 +102,16 @@ class WelcomeScreen extends StatelessWidget {
                   color: AppTheme.warningOrange,
                 ),
 
-                const Spacer(),
+                const SizedBox(height: 40),
 
                 // Get Started Button
                 SizedBox(
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: () async {
-                      final authProvider = Provider.of<AuthProvider>(
-                        context,
-                        listen: false,
-                      );
-                      await authProvider.startSignup();
-                      if (context.mounted) {
-                        context.go('/permissions');
-                      }
+                    onPressed: () {
+                      // Navigate directly to permissions screen for now
+                      context.go('/permissions');
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primaryBlue,
@@ -143,15 +136,9 @@ class WelcomeScreen extends StatelessWidget {
 
                 // Already have account
                 TextButton(
-                  onPressed: () async {
-                    final authProvider = Provider.of<AuthProvider>(
-                      context,
-                      listen: false,
-                    );
-                    await authProvider.startLogin();
-                    if (context.mounted) {
-                      context.go('/permissions');
-                    }
+                  onPressed: () {
+                    // Navigate to sign-in screen
+                    context.go('/sign-in');
                   },
                   child: Text(
                     'Already have an account? Sign In',

@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+
 import '../../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 
@@ -21,9 +22,11 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> {
   final _wardController = TextEditingController();
 
   bool _isLoading = false;
+  bool _isDisposed = false;
 
   @override
   void dispose() {
+    _isDisposed = true;
     _nameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
@@ -34,8 +37,11 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> {
 
   void _submitProfile() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_isDisposed) return;
 
-    setState(() => _isLoading = true);
+    if (mounted && !_isDisposed) {
+      setState(() => _isLoading = true);
+    }
 
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -50,11 +56,11 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> {
         municipalWard: _wardController.text.trim(),
       );
 
-      if (mounted) {
+      if (mounted && !_isDisposed) {
         context.go('/tutorial');
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && !_isDisposed) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error creating profile: $e'),
@@ -62,9 +68,12 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> {
           ),
         );
       }
+    } finally {
+      // Always check mounted and disposed before calling setState
+      if (mounted && !_isDisposed) {
+        setState(() => _isLoading = false);
+      }
     }
-
-    setState(() => _isLoading = false);
   }
 
   @override

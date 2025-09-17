@@ -66,6 +66,7 @@ class AuthProvider extends ChangeNotifier {
 
       _currentUser = user;
       _isAuthenticated = true;
+      _isOnboardingComplete = true;
 
       // Save to local storage
       await StorageService.saveUser(user);
@@ -104,6 +105,43 @@ class AuthProvider extends ChangeNotifier {
   }
 
   // Simulate login process
+  Future<void> signIn({required String email, required String password}) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      // Simulate API delay
+      await Future.delayed(const Duration(seconds: 1));
+
+      // For demo purposes, create a mock signed-in user
+      // In real app, this would validate credentials with backend
+      final user = UserModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        name: "Demo User",
+        email: email,
+        phoneNumber: "+1234567890",
+        homeAddress: "123 Demo Street, Demo City",
+        municipalWard: "Ward 1",
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      _currentUser = user;
+      _isAuthenticated = true;
+      _isOnboardingComplete = true;
+
+      // Save to local storage
+      await StorageService.saveUser(user);
+    } catch (e) {
+      debugPrint('Error signing in: $e');
+      rethrow;
+    }
+
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  // Simulate login process (legacy method)
   Future<void> startLogin() async {
     _isLoading = true;
     notifyListeners();

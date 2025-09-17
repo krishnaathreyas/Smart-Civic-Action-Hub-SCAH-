@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
+
 import '../../../core/theme/app_theme.dart';
 
 class PermissionsScreen extends StatefulWidget {
@@ -26,14 +27,18 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
     final locationStatus = await Permission.location.status;
     final notificationStatus = await Permission.notification.status;
 
-    setState(() {
-      _locationGranted = locationStatus.isGranted;
-      _notificationGranted = notificationStatus.isGranted;
-    });
+    if (mounted) {
+      setState(() {
+        _locationGranted = locationStatus.isGranted;
+        _notificationGranted = notificationStatus.isGranted;
+      });
+    }
   }
 
   Future<void> _requestLocationPermission() async {
-    setState(() => _isLoading = true);
+    if (mounted) {
+      setState(() => _isLoading = true);
+    }
 
     final status = await Permission.location.request();
 
@@ -48,14 +53,18 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
       _showSettingsDialog('Location');
     }
 
-    setState(() {
-      _locationGranted = status.isGranted;
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _locationGranted = status.isGranted;
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _requestNotificationPermission() async {
-    setState(() => _isLoading = true);
+    if (mounted) {
+      setState(() => _isLoading = true);
+    }
 
     final status = await Permission.notification.request();
 
@@ -70,10 +79,12 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
       _showSettingsDialog('Notifications');
     }
 
-    setState(() {
-      _notificationGranted = status.isGranted;
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _notificationGranted = status.isGranted;
+        _isLoading = false;
+      });
+    }
   }
 
   void _showPermissionDialog({
@@ -150,9 +161,10 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
         centerTitle: true,
       ),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 20),
@@ -205,7 +217,7 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                     : _requestNotificationPermission,
               ),
 
-              const Spacer(),
+              const SizedBox(height: 40),
 
               // Grant Permissions Button
               if (!_locationGranted || !_notificationGranted)

@@ -1,6 +1,7 @@
 import 'package:go_router/go_router.dart';
 
 import '../presentation/providers/auth_provider.dart';
+import '../presentation/screens/auth/sign_in_screen.dart';
 import '../presentation/screens/dashboard/home_screen.dart';
 import '../presentation/screens/onboarding/permissions_screen.dart';
 import '../presentation/screens/onboarding/profile_creation_screen.dart';
@@ -17,27 +18,35 @@ class AppRouter {
 
   late final router = GoRouter(
     initialLocation: '/welcome',
+    refreshListenable: authProvider,
     redirect: (context, state) {
-      final isLoggedIn = authProvider.isAuthenticated;
+      final isAuthenticated = authProvider.isAuthenticated;
       final isOnboardingComplete = authProvider.isOnboardingComplete;
 
-      if (!isLoggedIn) {
-        return '/welcome';
+      // If user is authenticated and onboarding is complete, redirect to home
+      if (isAuthenticated &&
+          isOnboardingComplete &&
+          (state.fullPath == '/welcome' || state.fullPath == '/')) {
+        return '/home';
       }
 
-      if (!isOnboardingComplete) {
-        return '/permissions';
-      }
-
+      // Allow navigation during onboarding process
       return null;
     },
     routes: [
-      // Onboarding Routes
+      // Authentication Routes
       GoRoute(
         path: '/welcome',
         name: 'welcome',
         builder: (context, state) => const WelcomeScreen(),
       ),
+      GoRoute(
+        path: '/sign-in',
+        name: 'sign-in',
+        builder: (context, state) => const SignInScreen(),
+      ),
+
+      // Onboarding Routes
       GoRoute(
         path: '/permissions',
         name: 'permissions',

@@ -2,10 +2,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import '../../../core/theme/app_theme.dart';
+
 import '../../../core/constants/app_constants.dart';
-import '../../providers/report_provider.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../providers/location_provider.dart';
+import '../../providers/report_provider.dart';
 
 class ReportSubmissionScreen extends StatefulWidget {
   const ReportSubmissionScreen({Key? key}) : super(key: key);
@@ -62,7 +63,9 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
       return;
     }
 
-    setState(() => _isSubmitting = true);
+    if (mounted) {
+      setState(() => _isSubmitting = true);
+    }
 
     try {
       final reportProvider = Provider.of<ReportProvider>(
@@ -87,9 +90,11 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
       if (mounted) {
         _showErrorSnackBar('Failed to submit report: $e');
       }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
-
-    setState(() => _isSubmitting = false);
   }
 
   void _showSuccessDialog() {

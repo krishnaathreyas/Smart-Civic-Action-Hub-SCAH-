@@ -17,6 +17,8 @@ class AppTheme {
 
   static ThemeData lightTheme = ThemeData(
     useMaterial3: true,
+    fontFamily: 'Roboto',
+    fontFamilyFallback: const ['Noto Sans', 'Arial', 'sans-serif'],
     colorScheme: ColorScheme.fromSeed(
       seedColor: primaryBlue,
       brightness: Brightness.light,
@@ -66,6 +68,8 @@ class AppTheme {
 
   static ThemeData darkTheme = ThemeData(
     useMaterial3: true,
+    fontFamily: 'Roboto',
+    fontFamilyFallback: const ['Noto Sans', 'Arial', 'sans-serif'],
     colorScheme: ColorScheme.fromSeed(
       seedColor: primaryBlue,
       brightness: Brightness.dark,
