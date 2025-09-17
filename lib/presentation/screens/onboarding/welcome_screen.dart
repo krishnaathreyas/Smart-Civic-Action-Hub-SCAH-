@@ -19,6 +19,7 @@ class WelcomeScreen extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: SingleChildScrollView(
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 const SizedBox(height: 60),
 
@@ -69,7 +70,7 @@ class WelcomeScreen extends StatelessWidget {
                   textAlign: TextAlign.center,
                 ),
 
-                const Spacer(),
+                const SizedBox(height: 40),
 
                 // Feature Highlights
                 _buildFeatureCard(
@@ -103,21 +104,38 @@ class WelcomeScreen extends StatelessWidget {
                   color: AppTheme.warningOrange,
                 ),
 
-                const Spacer(),
+                const SizedBox(height: 40),
 
                 // Get Started Button
+                // Replace the Get Started Button code with:
                 SizedBox(
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton(
+                    // Replace the ElevatedButton's onPressed callback with:
+                    // Replace the onPressed callback in the Get Started button
                     onPressed: () async {
-                      final authProvider = Provider.of<AuthProvider>(
-                        context,
-                        listen: false,
-                      );
-                      await authProvider.startSignup();
-                      if (context.mounted) {
-                        context.go('/permissions');
+                      try {
+                        debugPrint('Get Started pressed');
+                        final authProvider = Provider.of<AuthProvider>(
+                          context,
+                          listen: false,
+                        );
+                        // Reset onboarding status before starting signup
+                        authProvider.resetOnboarding();
+                        await authProvider.startSignup();
+
+                        if (context.mounted) {
+                          debugPrint('Navigating to permissions');
+                          context.go('/permissions');
+                        }
+                      } catch (e) {
+                        debugPrint('Navigation error: $e');
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(
+                            context,
+                          ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                        }
                       }
                     },
                     style: ElevatedButton.styleFrom(
@@ -150,10 +168,10 @@ class WelcomeScreen extends StatelessWidget {
                     );
                     await authProvider.startLogin();
                     if (context.mounted) {
-                      context.go('/permissions');
+                      context.go('/signin');
                     }
                   },
-                  child: Text(
+                  child: const Text(
                     'Already have an account? Sign In',
                     style: TextStyle(
                       color: AppTheme.primaryBlue,

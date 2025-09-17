@@ -36,6 +36,7 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
     setState(() => _isLoading = true);
 
     final status = await Permission.location.request();
+    debugPrint('Location permission status: ${status.isGranted}'); // Add this
 
     if (status.isDenied) {
       _showPermissionDialog(
@@ -129,9 +130,15 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
   }
 
   void _continue() {
+    debugPrint(
+      'Continue pressed. Location granted: $_locationGranted',
+    ); // Add this
+
     if (_locationGranted) {
-      context.go('/profile-creation');
+      debugPrint('Attempting to navigate to profile creation'); // Add this
+      context.push('/profile-creation');
     } else {
+      debugPrint('Showing error snackbar'); // Add this
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Location permission is required to continue.'),
@@ -248,7 +255,9 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: _continue,
+                    onPressed: _locationGranted
+                        ? _continue
+                        : null, // Verify this condition
                     child: const Text(
                       'Continue',
                       style: TextStyle(

@@ -50,6 +50,9 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> {
         municipalWard: _wardController.text.trim(),
       );
 
+      // Set onboarding as complete after profile creation
+      authProvider.completeOnboarding();
+
       if (mounted) {
         context.go('/tutorial');
       }
@@ -64,7 +67,9 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> {
       }
     }
 
-    setState(() => _isLoading = false);
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
   }
 
   @override

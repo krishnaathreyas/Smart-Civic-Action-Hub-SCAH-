@@ -19,6 +19,11 @@ class AuthProvider extends ChangeNotifier {
   AuthProvider() {
     _loadUserFromStorage();
   }
+  // Add this method to your AuthProvider class
+  void resetOnboarding() {
+    _isOnboardingComplete = false;
+    notifyListeners();
+  }
 
   Future<void> _loadUserFromStorage() async {
     _isLoading = true;
@@ -83,7 +88,7 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Simulate signup process
+  // Modify the startSignup method:
   Future<void> startSignup() async {
     _isLoading = true;
     notifyListeners();
@@ -92,8 +97,9 @@ class AuthProvider extends ChangeNotifier {
       // Simulate API delay
       await Future.delayed(const Duration(milliseconds: 500));
 
-      // For demo purposes, just mark as "starting signup"
-      // In real app, this would validate email/phone and send verification
+      // Set authenticated to true
+      _isAuthenticated = true; // Add this line
+      notifyListeners();
     } catch (e) {
       debugPrint('Error starting signup: $e');
       rethrow;
@@ -103,7 +109,7 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Simulate login process
+  // Similarly modify the startLogin method:
   Future<void> startLogin() async {
     _isLoading = true;
     notifyListeners();
@@ -112,8 +118,9 @@ class AuthProvider extends ChangeNotifier {
       // Simulate API delay
       await Future.delayed(const Duration(milliseconds: 500));
 
-      // For demo purposes, skip to creating a demo user
-      // In real app, this would validate credentials
+      // Set authenticated to true
+      _isAuthenticated = true; // Add this line
+      notifyListeners();
     } catch (e) {
       debugPrint('Error starting login: $e');
       rethrow;
