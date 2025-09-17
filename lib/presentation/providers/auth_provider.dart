@@ -1,7 +1,8 @@
 // presentation/providers/auth_provider.dart
 import 'package:flutter/foundation.dart';
-import '../../data/models/user_model.dart';
+
 import '../../core/services/storage_service.dart';
+import '../../data/models/user_model.dart';
 
 class AuthProvider extends ChangeNotifier {
   UserModel? _currentUser;
@@ -79,6 +80,46 @@ class AuthProvider extends ChangeNotifier {
 
   void completeOnboarding() {
     _isOnboardingComplete = true;
+    notifyListeners();
+  }
+
+  // Simulate signup process
+  Future<void> startSignup() async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      // Simulate API delay
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // For demo purposes, just mark as "starting signup"
+      // In real app, this would validate email/phone and send verification
+    } catch (e) {
+      debugPrint('Error starting signup: $e');
+      rethrow;
+    }
+
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  // Simulate login process
+  Future<void> startLogin() async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      // Simulate API delay
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // For demo purposes, skip to creating a demo user
+      // In real app, this would validate credentials
+    } catch (e) {
+      debugPrint('Error starting login: $e');
+      rethrow;
+    }
+
+    _isLoading = false;
     notifyListeners();
   }
 

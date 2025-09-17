@@ -42,9 +42,15 @@ dependencies:
   # Permissions
   permission_handler: ^11.1.0
   
+<<<<<<< HEAD
   # Notifications
   firebase_messaging: ^14.7.6
   flutter_local_notifications: ^19.4.2
+=======
+  # Notifications (Firebase removed temporarily for Windows compatibility)
+  # firebase_messaging: ^14.7.6
+  flutter_local_notifications: ^16.3.0
+>>>>>>> 70bce35c572642be5038b0958f799825e5b7aaef
   
   # Utils
   intl: ^0.18.1
