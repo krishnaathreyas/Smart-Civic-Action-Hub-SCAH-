@@ -1,14 +1,14 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../presentation/screens/onboarding/welcome_screen.dart';
+
+import '../presentation/providers/auth_provider.dart';
+import '../presentation/screens/dashboard/home_screen.dart';
 import '../presentation/screens/onboarding/permissions_screen.dart';
 import '../presentation/screens/onboarding/profile_creation_screen.dart';
 import '../presentation/screens/onboarding/tutorial_screen.dart';
-import '../presentation/screens/dashboard/home_screen.dart';
-import '../presentation/screens/report/report_submission_screen.dart';
-import '../presentation/screens/report/report_detail_screen.dart';
+import '../presentation/screens/onboarding/welcome_screen.dart';
 import '../presentation/screens/profile/profile_screen.dart';
-import '../presentation/providers/auth_provider.dart';
+import '../presentation/screens/report/report_detail_screen.dart';
+import '../presentation/screens/report/report_submission_screen.dart';
 
 class AppRouter {
   final AuthProvider authProvider;
@@ -59,14 +59,12 @@ class AppRouter {
         path: '/home',
         name: 'home',
         builder: (context, state) => const HomeScreen(),
-        routes: [
-          GoRoute(
-            path: '/report-detail/:id',
-            name: 'report-detail',
-            builder: (context, state) =>
-                ReportDetailScreen(reportId: state.pathParameters['id']!),
-          ),
-        ],
+      ),
+      GoRoute(
+        path: '/report-detail/:id',
+        name: 'report-detail',
+        builder: (context, state) =>
+            ReportDetailScreen(reportId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/submit-report',
