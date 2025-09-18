@@ -46,10 +46,319 @@
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
+    
+    /* Improve rendering performance and reduce DOM issues */
+    * {
+      box-sizing: border-box;
+    }
+    
+    /* Ensure Google Maps containers are properly rendered */
+    .gm-style, .gm-style > div {
+      transform: translateZ(0);
+      -webkit-transform: translateZ(0);
+    }
+    
+    /* Prevent layout issues with Flutter web */
+    flt-glass-pane {
+      overflow: hidden;
+    }
   </style>
 
   <title>scah</title>
   <link rel="manifest" href="manifest.json">
+  
+  <!-- Google Maps JavaScript API -->
+  <!-- NOTE: For production, replace with your actual API key from Google Cloud Console -->
+  <!-- Get your API key from: https://developers.google.com/maps/documentation/javascript/get-api-key -->
+  <script>
+    // Enhanced Google Maps initialization with better error handling
+    window.google = window.google || {};
+    window.google.maps = window.google.maps || {};
+    
+    // Global flag to track if Google Maps is properly loaded
+    window.googleMapsLoaded = false;
+    
+    // Enhanced initialization function
+    function initGoogleMaps() {
+      try {
+        if (window.google && window.google.maps && window.google.maps.Map) {
+          window.googleMapsLoaded = true;
+          console.log('Google Maps API loaded successfully');
+        } else {
+          console.warn('Google Maps API not available, using fallback');
+          // Comprehensive fallback for Google Maps
+          window.google.maps = {
+            Map: function(element, options) { 
+              console.log('Using fallback Map implementation');
+              return {
+                setCenter: function() {},
+                setZoom: function() {},
+                panTo: function() {},
+                getCenter: function() { return new window.google.maps.LatLng(0, 0); },
+                getZoom: function() { return 10; }
+              }; 
+            },
+            Marker: function(options) { 
+              return {
+                setMap: function() {},
+                setPosition: function() {},
+                setVisible: function() {}
+              }; 
+            },
+            InfoWindow: function() { 
+              return {
+                open: function() {},
+                close: function() {},
+                setContent: function() {}
+              }; 
+            },
+            LatLng: function(lat, lng) { 
+              return { 
+                lat: function() { return lat; }, 
+                lng: function() { return lng; } 
+              }; 
+            },
+            Size: function(w, h) { return { width: w, height: h }; },
+            Point: function(x, y) { return { x: x, y: y }; },
+            event: {
+              addListener: function() { return {}; },
+              removeListener: function() {},
+              trigger: function() {}
+            }
+          };
+          window.googleMapsLoaded = false;
+        }
+      } catch (error) {
+        console.error('Error initializing Google Maps:', error);
+        window.googleMapsLoaded = false;
+      }
+    }
+    
+    // Initialize immediately and on DOM ready
+    initGoogleMaps();
+    
+    // Also initialize when DOM is fully loaded
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initGoogleMaps);
+    } else {
+      // DOM is already loaded
+      initGoogleMaps();
+    }
+    
+    // Global callback for successful Maps API load
+    function onGoogleMapsLoaded() {
+      window.googleMapsLoaded = true;
+      console.log('Google Maps API callback executed successfully');
+      // Attempt to upgrade deprecated google.maps.Marker to AdvancedMarkerElement
+      try {
+        patchDeprecatedMarker();
+      } catch (e) {
+        console.warn('Marker patch failed or skipped:', e);
+      }
+    }
+    
+    // Fix for IntersectionObserver error
+    (function() {
+      const originalObserve = IntersectionObserver.prototype.observe;
+      IntersectionObserver.prototype.observe = function(target) {
+        try {
+          // Check if target is a valid Element before observing
+          if (target && target instanceof Element) {
+            return originalObserve.call(this, target);
+          } else {
+            console.warn('IntersectionObserver.observe called with invalid target:', target);
+          }
+        } catch (error) {
+          console.error('Error in IntersectionObserver.observe:', error);
+        }
+      };
+    })();
+    
+    // Additional error handling for Promise rejections
+    window.addEventListener('unhandledrejection', function(event) {
+      if (event.reason && event.reason.message && 
+          event.reason.message.includes('IntersectionObserver')) {
+        console.warn('Suppressed IntersectionObserver error:', event.reason.message);
+        event.preventDefault(); // Prevent the error from being logged to console
+      }
+    });
+
+    // Patch deprecated google.maps.Marker to use AdvancedMarkerElement on web
+    function patchDeprecatedMarker() {
+      try {
+        if (!window.google || !window.google.maps) return;
+        // Avoid double patching
+        if (window.google.maps.__markerPatched) return;
+
+        // Ensure the Advanced Marker library is available
+        const advanced = window.google.maps.marker && window.google.maps.marker.AdvancedMarkerElement;
+        if (!advanced) {
+          console.warn('AdvancedMarkerElement not available; skipping marker patch.');
+          return;
+        }
+
+        console.log('Patching google.maps.Marker to use AdvancedMarkerElement');
+
+        const OriginalEvent = window.google.maps.event;
+        const AdvancedMarker = window.google.maps.marker.AdvancedMarkerElement;
+
+        function toGmpEvent(name) {
+          const map = {
+            'click': 'gmp-click',
+            'dblclick': 'gmp-dblclick',
+            'rightclick': 'gmp-rightclick',
+            'mouseover': 'gmp-mouseover',
+            'mouseout': 'gmp-mouseout',
+            'dragstart': 'gmp-dragstart',
+            'drag': 'gmp-drag',
+            'dragend': 'gmp-dragend',
+          };
+          return map[name] || name;
+        }
+
+        function AdvancedMarkerWrapper(opts) {
+          opts = opts || {};
+          const options = {
+            map: opts.map || null,
+            position: opts.position || null,
+            title: opts.title,
+            zIndex: opts.zIndex,
+            gmpClickable: typeof opts.clickable === 'boolean' ? opts.clickable : undefined,
+            draggable: !!opts.draggable,
+          };
+          // Basic icon support: if url string provided, create an <img> content
+          try {
+            const icon = opts.icon;
+            let url = null;
+            if (typeof icon === 'string') url = icon;
+            else if (icon && typeof icon === 'object' && typeof icon.url === 'string') url = icon.url;
+            if (url) {
+              const img = document.createElement('img');
+              img.src = url;
+              img.style.width = '24px';
+              img.style.height = '24px';
+              options.content = img;
+            }
+          } catch (_) {}
+
+          this._impl = new AdvancedMarker(options);
+          this._visible = opts.visible !== false;
+          if (!this._visible && this._impl.element) {
+            this._impl.element.style.display = 'none';
+          }
+        }
+
+        AdvancedMarkerWrapper.prototype.setMap = function(map) {
+          this._impl.map = map || null;
+        };
+        AdvancedMarkerWrapper.prototype.getMap = function() {
+          return this._impl.map || null;
+        };
+        AdvancedMarkerWrapper.prototype.setPosition = function(position) {
+          this._impl.position = position || null;
+        };
+        AdvancedMarkerWrapper.prototype.getPosition = function() {
+          return this._impl.position || null;
+        };
+        AdvancedMarkerWrapper.prototype.setVisible = function(visible) {
+          this._visible = !!visible;
+          if (this._impl.element) {
+            this._impl.element.style.display = this._visible ? '' : 'none';
+          }
+        };
+        AdvancedMarkerWrapper.prototype.getVisible = function() {
+          return this._visible;
+        };
+        AdvancedMarkerWrapper.prototype.setZIndex = function(z) {
+          this._impl.zIndex = z;
+        };
+        AdvancedMarkerWrapper.prototype.getZIndex = function() { return this._impl.zIndex; };
+        AdvancedMarkerWrapper.prototype.addListener = function(eventName, handler) {
+          return OriginalEvent.addListener(this._impl, toGmpEvent(eventName), handler);
+        };
+
+        // Emulate MVCObject-ish API
+        AdvancedMarkerWrapper.prototype.set = function(prop, value) {
+          switch (prop) {
+            case 'map': this.setMap(value); break;
+            case 'position': this.setPosition(value); break;
+            case 'zIndex': this.setZIndex(value); break;
+            case 'visible': this.setVisible(value); break;
+            case 'title': this._impl.title = value; break;
+            case 'icon': this.setIcon(value); break;
+            case 'clickable': this.setClickable(value); break;
+            case 'draggable': this.setDraggable(value); break;
+            default:
+              try { this._impl[prop] = value; } catch (_) {}
+          }
+        };
+        AdvancedMarkerWrapper.prototype.get = function(prop) {
+          switch (prop) {
+            case 'map': return this.getMap();
+            case 'position': return this.getPosition();
+            case 'zIndex': return this.getZIndex();
+            case 'visible': return this.getVisible();
+            case 'title': return this._impl.title;
+            default: return this._impl[prop];
+          }
+        };
+        AdvancedMarkerWrapper.prototype.setOptions = function(opts) { this.setValues(opts); };
+        AdvancedMarkerWrapper.prototype.setValues = function(opts) {
+          if (!opts) return;
+          for (const k in opts) {
+            if (Object.prototype.hasOwnProperty.call(opts, k)) {
+              this.set(k, opts[k]);
+            }
+          }
+        };
+
+        // No-op methods for compatibility with code expecting classic Marker API
+        const noop = function() {};
+        AdvancedMarkerWrapper.prototype.setIcon = function(icon) {
+          try {
+            let url = null;
+            if (typeof icon === 'string') url = icon;
+            else if (icon && typeof icon === 'object' && typeof icon.url === 'string') url = icon.url;
+            if (url) {
+              const img = document.createElement('img');
+              img.src = url;
+              img.style.width = '24px';
+              img.style.height = '24px';
+              this._impl.content = img;
+            }
+          } catch (_) {}
+        };
+        AdvancedMarkerWrapper.prototype.setLabel = noop;
+        AdvancedMarkerWrapper.prototype.setDraggable = function(d) { this._impl.draggable = !!d; };
+        AdvancedMarkerWrapper.prototype.setClickable = function(c) { this._impl.gmpClickable = !!c; };
+        AdvancedMarkerWrapper.prototype.setAnimation = noop;
+
+        // Save original class in case something needs it
+        window.google.maps._OriginalMarker = window.google.maps.Marker;
+        // Replace with wrapper
+        window.google.maps.Marker = AdvancedMarkerWrapper;
+        window.google.maps.__markerPatched = true;
+      } catch (err) {
+        console.error('Failed to patch google.maps.Marker:', err);
+      }
+    }
+  </script>
+  <script>
+    // Dynamically inject Google Maps script with API key resolution
+    (function loadGoogleMaps() {
+      // Priority: meta tag > localStorage > placeholder
+      const meta = document.querySelector('meta[name="google-maps-api-key"]');
+      const keyFromMeta = meta && meta.getAttribute('content');
+      const keyFromStorage = localStorage.getItem('GOOGLE_MAPS_API_KEY');
+      const apiKey = keyFromMeta || keyFromStorage || 'AIzaSyDemo_DevelopmentKey_NotForProduction';
+
+      const src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&libraries=geometry,places,marker&callback=onGoogleMapsLoaded`;
+      const s = document.createElement('script');
+      s.async = true; s.defer = true; s.src = src;
+      s.onerror = function() { initGoogleMaps(); };
+      document.head.appendChild(s);
+    })();
+  </script>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>

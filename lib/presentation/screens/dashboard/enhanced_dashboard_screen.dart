@@ -5,12 +5,15 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_theme.dart';
-import '../../../data/demo/demo_reports.dart';
-import '../../../data/models/report_models.dart';
+import '../../../data/models/report_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/location_provider.dart';
 import '../../providers/report_provider.dart';
+import '../../utils/department_stats_generator.dart';
+import '../../widgets/department_charts.dart';
 import '../../widgets/enhanced_report_card.dart';
+import '../../widgets/safe_google_map.dart';
+import '../debug_storage_screen.dart';
 import '../report/enhanced_report_detail_screen.dart';
 
 class EnhancedDashboardScreen extends StatefulWidget {
@@ -27,8 +30,6 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
   String _selectedCategory = 'All';
   String _selectedStatus = 'All';
   String _sortBy = 'Recent';
-  List<ReportModel> _filteredReports = [];
-  List<ReportModel> _allReports = [];
 
   final List<String> _categories = [
     'All',
@@ -53,15 +54,89 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _allReports = DemoReports.getDemoReports();
-    _filteredReports = _allReports;
-    _applyFilters();
+
+    // Initialize location and reports on first load
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final reportProvider = Provider.of<ReportProvider>(
+        context,
+        listen: false,
+      );
+      final locationProvider = Provider.of<LocationProvider>(
+        context,
+        listen: false,
+      );
+
+      // Load reports if not already loaded
+      if (mounted) reportProvider.loadReports();
+
+      // Get current location
+      if (mounted) locationProvider.getCurrentLocation();
+    });
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  // Check if any filters are active
+  bool get _hasActiveFilters =>
+      _selectedCategory != 'All' || _selectedStatus != 'All';
+
+  // Filter and sort reports based on selected criteria
+  List<ReportModel> _getFilteredAndSortedReports(List<ReportModel> reports) {
+    List<ReportModel> filteredReports = reports;
+
+    // Filter by category
+    if (_selectedCategory != 'All') {
+      filteredReports = filteredReports.where((report) {
+        return report.category.toLowerCase() == _selectedCategory.toLowerCase();
+      }).toList();
+    }
+
+    // Filter by status
+    if (_selectedStatus != 'All') {
+      filteredReports = filteredReports.where((report) {
+        return report.status.toLowerCase() == _selectedStatus.toLowerCase();
+      }).toList();
+    }
+
+    // Sort reports
+    switch (_sortBy) {
+      case 'Recent':
+        filteredReports.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        break;
+      case 'Votes':
+        filteredReports.sort((a, b) => b.upvotes.compareTo(a.upvotes));
+        break;
+      case 'Priority':
+        // Sort by priority (High > Medium > Low)
+        filteredReports.sort((a, b) {
+          const priorityOrder = {'High': 3, 'Medium': 2, 'Low': 1};
+          final aPriority = priorityOrder[a.priority] ?? 0;
+          final bPriority = priorityOrder[b.priority] ?? 0;
+          return bPriority.compareTo(aPriority);
+        });
+        break;
+      case 'Status':
+        // Sort by status (Pending > In Progress > Resolved > Rejected)
+        filteredReports.sort((a, b) {
+          const statusOrder = {
+            'Pending': 4,
+            'In Progress': 3,
+            'Resolved': 2,
+            'Rejected': 1,
+          };
+          final aStatus = statusOrder[a.status] ?? 0;
+          final bStatus = statusOrder[b.status] ?? 0;
+          return bStatus.compareTo(aStatus);
+        });
+        break;
+    }
+
+    return filteredReports;
   }
 
   @override
@@ -178,35 +253,47 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
     return SliverToBoxAdapter(
       child: Container(
         padding: const EdgeInsets.all(20),
-        child: Row(
-          children: [
-            Expanded(
-              child: _buildStatCard(
-                'Total Reports',
-                _allReports.length.toString(),
-                Icons.report,
-                Colors.blue,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildStatCard(
-                'Resolved',
-                _getResolvedCount().toString(),
-                Icons.check_circle,
-                Colors.green,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildStatCard(
-                'In Progress',
-                _getInProgressCount().toString(),
-                Icons.hourglass_empty,
-                Colors.orange,
-              ),
-            ),
-          ],
+        child: Consumer<ReportProvider>(
+          builder: (context, reportProvider, child) {
+            final reports = reportProvider.reports;
+            final resolvedCount = reports
+                .where((r) => r.status == 'resolved')
+                .length;
+            final inProgressCount = reports
+                .where((r) => r.status == 'in_progress')
+                .length;
+
+            return Row(
+              children: [
+                Expanded(
+                  child: _buildStatCard(
+                    'Total Reports',
+                    reports.length.toString(),
+                    Icons.report,
+                    Colors.blue,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildStatCard(
+                    'Resolved',
+                    resolvedCount.toString(),
+                    Icons.check_circle,
+                    Colors.green,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildStatCard(
+                    'In Progress',
+                    inProgressCount.toString(),
+                    Icons.hourglass_empty,
+                    Colors.orange,
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -227,22 +314,21 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
-            offset: const Offset(0, 4),
+            offset: const Offset(0, 2),
           ),
         ],
       ),
       child: Column(
         children: [
-          Icon(icon, color: color, size: 24),
+          Icon(icon, color: color, size: 28),
           const SizedBox(height: 8),
           Text(
             value,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              color: AppTheme.darkGray,
               fontWeight: FontWeight.bold,
+              color: color,
             ),
           ),
-          const SizedBox(height: 4),
           Text(
             title,
             style: Theme.of(
@@ -258,114 +344,197 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
   Widget _buildFiltersSection() {
     return SliverToBoxAdapter(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Expanded(
-                  child: _buildFilterDropdown(
-                    'Category',
-                    _selectedCategory,
-                    _categories,
-                    (value) => setState(() {
-                      _selectedCategory = value!;
-                      _applyFilters();
-                    }),
+                  child: DropdownButtonFormField<String>(
+                    value: _selectedCategory,
+                    decoration: const InputDecoration(
+                      labelText: 'Category',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                    ),
+                    items: _categories
+                        .map(
+                          (category) => DropdownMenuItem(
+                            value: category,
+                            child: Text(category),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() {
+                          _selectedCategory = value;
+                        });
+                      }
+                    },
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: _buildFilterDropdown(
-                    'Status',
-                    _selectedStatus,
-                    _statuses,
-                    (value) => setState(() {
-                      _selectedStatus = value!;
-                      _applyFilters();
-                    }),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildFilterDropdown(
-                    'Sort By',
-                    _sortBy,
-                    _sortOptions,
-                    (value) => setState(() {
-                      _sortBy = value!;
-                      _applyFilters();
-                    }),
+                  child: DropdownButtonFormField<String>(
+                    value: _selectedStatus,
+                    decoration: const InputDecoration(
+                      labelText: 'Status',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                    ),
+                    items: _statuses
+                        .map(
+                          (status) => DropdownMenuItem(
+                            value: status,
+                            child: Text(status),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() {
+                          _selectedStatus = value;
+                        });
+                      }
+                    },
                   ),
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _sortBy,
+              decoration: const InputDecoration(
+                labelText: 'Sort By',
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+              ),
+              items: _sortOptions
+                  .map(
+                    (option) =>
+                        DropdownMenuItem(value: option, child: Text(option)),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    _sortBy = value;
+                  });
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            // Clear filters button and active filters indicator
+            if (_hasActiveFilters) ...[
+              Row(
+                children: [
+                  Icon(
+                    Icons.filter_list,
+                    color: AppTheme.primaryBlue,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Filters active',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppTheme.primaryBlue,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _selectedCategory = 'All';
+                        _selectedStatus = 'All';
+                        _sortBy = 'Recent';
+                      });
+                    },
+                    child: const Text('Clear All'),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 20),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildFilterDropdown(
-    String label,
-    String value,
-    List<String> items,
-    ValueChanged<String?> onChanged,
-  ) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.lightGray),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: value,
-          isExpanded: true,
-          items: items.map((item) {
-            return DropdownMenuItem<String>(
-              value: item,
-              child: Text(
-                item,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: AppTheme.darkGray),
-              ),
-            );
-          }).toList(),
-          onChanged: onChanged,
-          icon: Icon(
-            Icons.keyboard_arrow_down,
-            color: AppTheme.mediumGray,
-            size: 20,
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildReportsTab() {
-    if (_filteredReports.isEmpty) {
-      return _buildEmptyState();
-    }
-
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: ListView.builder(
-        itemCount: _filteredReports.length,
-        itemBuilder: (context, index) {
-          final report = _filteredReports[index];
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: EnhancedReportCard(
-              report: report,
-              onTap: () => _openReportDetail(report),
+    return Consumer<ReportProvider>(
+      builder: (context, reportProvider, child) {
+        if (reportProvider.isLoading) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Loading reports...'),
+              ],
             ),
           );
-        },
-      ),
+        }
+
+        final allReports = reportProvider.reports;
+        if (allReports.isEmpty) {
+          return _buildEmptyState();
+        }
+
+        // Apply filters and sorting
+        final filteredReports = _getFilteredAndSortedReports(allReports);
+
+        if (filteredReports.isEmpty) {
+          return _buildNoResultsState();
+        }
+
+        return Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Show filter results count
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Text(
+                  'Showing ${filteredReports.length} of ${allReports.length} reports',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+                ),
+              ),
+              // Reports list
+              Expanded(
+                child: ListView.builder(
+                  itemCount: filteredReports.length,
+                  itemBuilder: (context, index) {
+                    final report = filteredReports[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: EnhancedReportCard(
+                        report: report,
+                        onTap: () => _openReportDetail(report),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -442,7 +611,8 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
     ReportProvider reportProvider,
   ) {
     final currentPosition = locationProvider.currentPosition!;
-    final reports = _filteredReports;
+    final allReports = reportProvider.reports;
+    final filteredReports = _getFilteredAndSortedReports(allReports);
 
     // Create markers for reports
     final Set<Marker> markers = {
@@ -456,8 +626,8 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
         ),
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
       ),
-      // Report markers
-      ...reports.map(
+      // Report markers (filtered)
+      ...filteredReports.map(
         (report) => Marker(
           markerId: MarkerId(report.id),
           position: LatLng(report.latitude, report.longitude),
@@ -473,7 +643,7 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
       ),
     };
 
-    return GoogleMap(
+    return SafeGoogleMap(
       initialCameraPosition: CameraPosition(
         target: LatLng(currentPosition.latitude, currentPosition.longitude),
         zoom: 14.0,
@@ -481,12 +651,8 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
       markers: markers,
       myLocationEnabled: true,
       myLocationButtonEnabled: true,
-      compassEnabled: true,
-      mapToolbarEnabled: true,
       zoomControlsEnabled: true,
-      onMapCreated: (GoogleMapController controller) {
-        // Map controller setup if needed
-      },
+      mapToolbarEnabled: false,
     );
   }
 
@@ -496,47 +662,149 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
         return BitmapDescriptor.hueGreen;
       case 'in_progress':
         return BitmapDescriptor.hueOrange;
-      case 'pending':
-        return BitmapDescriptor.hueRed;
       default:
         return BitmapDescriptor.hueRed;
     }
   }
 
   Widget _buildTrendsTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        children: [
-          _buildTrendCard(
-            'Most Active Category',
-            'Infrastructure',
-            '${_getCategoryCount('Infrastructure')} reports',
-            Icons.construction,
-            Colors.orange,
+    return Consumer<ReportProvider>(
+      builder: (context, reportProvider, child) {
+        final allReports = reportProvider.reports;
+        final filteredReports = _getFilteredAndSortedReports(allReports);
+
+        if (filteredReports.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.analytics_outlined,
+                  size: 64,
+                  color: AppTheme.mediumGray,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No Data Available',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: AppTheme.darkGray,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Submit some reports to see department analytics',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: AppTheme.mediumGray),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          );
+        }
+
+        // Generate department statistics from actual reports
+        final departmentStats = DepartmentStatsGenerator.generateStats(
+          filteredReports,
+        );
+        final summaryStats = DepartmentStatsGenerator.generateSummaryStats(
+          filteredReports,
+        );
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Summary Cards Section
+              Text(
+                'Department Performance Overview',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.darkGray,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Summary Statistics Cards
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildSummaryCard(
+                      'Total Reports',
+                      '${summaryStats['totalReports']}',
+                      'Across all departments',
+                      Icons.assignment,
+                      AppTheme.primaryBlue,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _buildSummaryCard(
+                      'Overall Resolution',
+                      '${summaryStats['overallResolutionRate'].toInt()}%',
+                      'Success rate',
+                      Icons.check_circle,
+                      Colors.green,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildSummaryCard(
+                      'Best Performer',
+                      summaryStats['bestDepartment']?.department
+                              .split(' ')
+                              .first ??
+                          'N/A',
+                      '${summaryStats['bestDepartment']?.resolutionRate.toInt() ?? 0}% resolved',
+                      Icons.star,
+                      Colors.orange,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _buildSummaryCard(
+                      'Avg Response',
+                      '${summaryStats['avgResponseTime'].toStringAsFixed(1)} days',
+                      'Resolution time',
+                      Icons.schedule,
+                      AppTheme.mediumGray,
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 32),
+
+              // Charts Section
+              if (departmentStats.isNotEmpty)
+                DepartmentChartsSection(departmentStats: departmentStats)
+              else
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(40),
+                    child: Text(
+                      'No department data available yet',
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: AppTheme.mediumGray,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
-          const SizedBox(height: 16),
-          _buildTrendCard(
-            'Resolution Rate',
-            '${(_getResolvedCount() / _allReports.length * 100).toInt()}%',
-            'This month',
-            Icons.trending_up,
-            Colors.green,
-          ),
-          const SizedBox(height: 16),
-          _buildTrendCard(
-            'Average Response Time',
-            '2.3 days',
-            'Government agencies',
-            Icons.schedule,
-            AppTheme.primaryBlue,
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildTrendCard(
+  Widget _buildSummaryCard(
     String title,
     String value,
     String subtitle,
@@ -544,56 +812,57 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
     Color color,
   ) {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 2,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: color, size: 24),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: AppTheme.mediumGray),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: AppTheme.darkGray,
-                    fontWeight: FontWeight.bold,
+                child: Icon(icon, color: color, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppTheme.mediumGray,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-                Text(
-                  subtitle,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: AppTheme.mediumGray),
-                ),
-              ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              color: AppTheme.darkGray,
+              fontWeight: FontWeight.bold,
             ),
+          ),
+          Text(
+            subtitle,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppTheme.mediumGray),
           ),
         ],
       ),
@@ -601,12 +870,11 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
   }
 
   Widget _buildEmptyState() {
-    return Container(
-      padding: const EdgeInsets.all(40),
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.inbox, size: 80, color: AppTheme.mediumGray),
+          Icon(Icons.report_off, size: 64, color: AppTheme.mediumGray),
           const SizedBox(height: 16),
           Text(
             'No Reports Found',
@@ -617,7 +885,7 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
           ),
           const SizedBox(height: 8),
           Text(
-            'Try adjusting your filters or create a new report.',
+            'Be the first to report an issue in your community',
             style: Theme.of(
               context,
             ).textTheme.bodyMedium?.copyWith(color: AppTheme.mediumGray),
@@ -628,90 +896,51 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
     );
   }
 
-  Widget _buildFloatingActionButton() {
-    return FloatingActionButton.extended(
-      heroTag: "dashboard_fab",
-      onPressed: () => context.push('/report-submission'),
-      backgroundColor: AppTheme.primaryBlue,
-      icon: const Icon(Icons.add, color: Colors.white),
-      label: const Text(
-        'New Report',
-        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+  Widget _buildNoResultsState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.filter_list_off, size: 64, color: AppTheme.mediumGray),
+          const SizedBox(height: 16),
+          Text(
+            'No Matching Reports',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              color: AppTheme.darkGray,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Try adjusting your filters to see more results',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: AppTheme.mediumGray),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _selectedCategory = 'All';
+                _selectedStatus = 'All';
+                _sortBy = 'Recent';
+              });
+            },
+            child: const Text('Clear Filters'),
+          ),
+        ],
       ),
     );
   }
 
-  void _applyFilters() {
-    setState(() {
-      _filteredReports = _allReports.where((report) {
-        // Category filter
-        if (_selectedCategory != 'All' &&
-            report.category != _selectedCategory) {
-          return false;
-        }
-
-        // Status filter
-        if (_selectedStatus != 'All') {
-          String normalizedStatus = _selectedStatus.toLowerCase().replaceAll(
-            ' ',
-            '_',
-          );
-          if (report.status != normalizedStatus) {
-            return false;
-          }
-        }
-
-        return true;
-      }).toList();
-
-      // Apply sorting
-      switch (_sortBy) {
-        case 'Recent':
-          _filteredReports.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          break;
-        case 'Votes':
-          _filteredReports.sort(
-            (a, b) =>
-                (b.upvotes - b.downvotes).compareTo(a.upvotes - a.downvotes),
-          );
-          break;
-        case 'Priority':
-          _filteredReports.sort(
-            (a, b) => _priorityValue(
-              b.priority,
-            ).compareTo(_priorityValue(a.priority)),
-          );
-          break;
-        case 'Status':
-          _filteredReports.sort((a, b) => a.status.compareTo(b.status));
-          break;
-      }
-    });
-  }
-
-  int _priorityValue(String priority) {
-    switch (priority.toLowerCase()) {
-      case 'high':
-        return 3;
-      case 'medium':
-        return 2;
-      case 'low':
-        return 1;
-      default:
-        return 0;
-    }
-  }
-
-  int _getResolvedCount() {
-    return _allReports.where((report) => report.status == 'resolved').length;
-  }
-
-  int _getInProgressCount() {
-    return _allReports.where((report) => report.status == 'in_progress').length;
-  }
-
-  int _getCategoryCount(String category) {
-    return _allReports.where((report) => report.category == category).length;
+  Widget _buildFloatingActionButton() {
+    return FloatingActionButton.extended(
+      onPressed: () => context.push('/submit-report'),
+      backgroundColor: AppTheme.primaryBlue,
+      icon: const Icon(Icons.add, color: Colors.white),
+      label: const Text('New Report', style: TextStyle(color: Colors.white)),
+    );
   }
 
   void _openReportDetail(ReportModel report) {
@@ -755,6 +984,18 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
               onTap: () {
                 context.pop();
                 // Navigate to help
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.bug_report, color: Colors.orange),
+              title: const Text('Debug Storage'),
+              onTap: () {
+                context.pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const DebugStorageScreen(),
+                  ),
+                );
               },
             ),
             const Divider(),

@@ -25,11 +25,19 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      debugPrint('=== SESSION LOADING DEBUG ===');
       final userData = await StorageService.getUser();
+      debugPrint(
+        'Loaded user data: ${userData != null ? "Found user ${userData.name} (${userData.email})" : "No user data found"}',
+      );
+
       if (userData != null) {
         _currentUser = userData;
         _isAuthenticated = true;
         _isOnboardingComplete = true;
+        debugPrint('User session restored successfully');
+      } else {
+        debugPrint('No existing user session found');
       }
     } catch (e) {
       debugPrint('Error loading user from storage: $e');
@@ -51,14 +59,19 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      debugPrint('=== CREATE PROFILE DEBUG ===');
+      debugPrint('Creating profile for: $name ($email)');
+
       // Check if email already exists
       final emailExists = await StorageService.emailExists(email);
+      debugPrint('Email exists check: $emailExists');
+
       if (emailExists) {
         throw Exception('An account with this email already exists');
       }
 
       // In a real app, this would make an API call
-      await Future.delayed(const Duration(seconds: 2));
+      await Future.delayed(const Duration(seconds: 1));
 
       final user = UserModel(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -72,6 +85,8 @@ class AuthProvider extends ChangeNotifier {
         updatedAt: DateTime.now(),
       );
 
+      debugPrint('User model created successfully');
+
       _currentUser = user;
       _isAuthenticated = true;
       _isOnboardingComplete = true;
@@ -80,6 +95,8 @@ class AuthProvider extends ChangeNotifier {
       await StorageService.saveUserToDatabase(user);
       // Save as current user session
       await StorageService.saveUser(user);
+
+      debugPrint('Profile creation completed successfully');
     } catch (e) {
       debugPrint('Error creating profile: $e');
       rethrow;
@@ -114,21 +131,40 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Simulate login process
+  // Sign in with improved error handling and debugging
   Future<void> signIn({required String email, required String password}) async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      // Simulate API delay
-      await Future.delayed(const Duration(seconds: 1));
+      debugPrint('=== SIGN IN DEBUG ===');
+      debugPrint('Attempting to sign in with email: $email');
+
+      // Check if email exists first
+      final emailExists = await StorageService.emailExists(email);
+      debugPrint('Email exists in database: $emailExists');
+
+      if (!emailExists) {
+        debugPrint('Email not found in database');
+        throw Exception(
+          'No account found with this email. Please sign up first.',
+        );
+      }
 
       // Validate credentials against stored users
       final user = await StorageService.validateCredentials(email, password);
+      debugPrint(
+        'User validation result: ${user != null ? "Success" : "Failed"}',
+      );
 
       if (user == null) {
-        throw Exception('Invalid email or password');
+        debugPrint('Password validation failed');
+        throw Exception(
+          'Invalid password. Please check your password and try again.',
+        );
       }
+
+      debugPrint('Sign in successful for user: ${user.name}');
 
       _currentUser = user;
       _isAuthenticated = true;
@@ -136,6 +172,7 @@ class AuthProvider extends ChangeNotifier {
 
       // Save as current user session
       await StorageService.saveUser(user);
+      debugPrint('User session saved successfully');
     } catch (e) {
       debugPrint('Error signing in: $e');
       rethrow;
@@ -233,11 +270,25 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    debugPrint('=== SIGNING OUT ===');
     _currentUser = null;
     _isAuthenticated = false;
     _isOnboardingComplete = false;
 
     await StorageService.clearUser();
+    debugPrint('User signed out successfully');
+    notifyListeners();
+  }
+
+  // Debug method to clear all user data
+  Future<void> clearAllUserData() async {
+    debugPrint('=== CLEARING ALL USER DATA ===');
+    _currentUser = null;
+    _isAuthenticated = false;
+    _isOnboardingComplete = false;
+
+    await StorageService.clearAllData();
+    debugPrint('All user data cleared');
     notifyListeners();
   }
 }

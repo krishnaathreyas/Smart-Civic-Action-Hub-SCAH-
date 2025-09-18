@@ -1,5 +1,9 @@
+// presentation/providers/report_provider.dart
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../data/models/report_model.dart';
@@ -71,37 +75,25 @@ class ReportProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Get reports from all departments
-      final departments = await _apiClient.getDepartments();
-      _reports.clear();
+      debugPrint('=== LOADING REPORTS ===');
 
-      for (var department in departments) {
-        final response = await _apiClient.getDepartmentReports(department);
-        final departmentReports = response['reports'] as List;
+      // Load both demo reports and user-submitted reports
+      _reports = [];
 
-        for (var report in departmentReports) {
-          _reports.add(
-            ReportModel(
-              id: report['id'],
-              userId: 'system', // Update with actual user ID when available
-              title: report['content'].split('\n')[0], // First line as title
-              description: report['content'],
-              category: report['metadata']['category'] ?? 'Uncategorized',
-              latitude: report['metadata']['location']?['latitude'] ?? 0.0,
-              longitude: report['metadata']['location']?['longitude'] ?? 0.0,
-              address: report['metadata']['location']?['address'] ?? '',
-              imageUrls: [], // Add image support in backend
-              isUrgent: report['metadata']['urgency'] == 'high',
-              status: report['metadata']['status'] ?? 'pending',
-              gracePeriodEnds: DateTime.now().add(
-                AppConstants.votingGracePeriod,
-              ),
-              createdAt: DateTime.now(), // Add timestamp in backend
-              updatedAt: DateTime.now(),
-            ),
-          );
-        }
-      }
+      // Add demo reports
+      final demoReports = _generateMockReports();
+      _reports.addAll(demoReports);
+      debugPrint('Loaded ${demoReports.length} demo reports');
+
+      // Load user-submitted reports from storage
+      final userReports = await _loadUserReportsFromStorage();
+      _reports.addAll(userReports);
+      debugPrint('Loaded ${userReports.length} user reports from storage');
+
+      // Sort by creation date (newest first)
+      _reports.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      debugPrint('Total reports loaded: ${_reports.length}');
     } catch (e) {
       debugPrint('Error loading reports: $e');
     }
@@ -166,6 +158,10 @@ class ReportProvider extends ChangeNotifier {
       );
 
       _reports.insert(0, report);
+
+      // Save user report to storage for persistence
+      await _saveUserReportToStorage(report);
+      debugPrint('Report saved to storage: ${report.title}');
     } catch (e) {
       debugPrint('Error submitting report: $e');
       rethrow;
@@ -295,6 +291,178 @@ class ReportProvider extends ChangeNotifier {
       return _reports.firstWhere((report) => report.id == reportId);
     } catch (e) {
       return null;
+    }
+  }
+
+  List<ReportModel> _generateMockReports() {
+    return [
+      ReportModel(
+        id: 'demo_1',
+        userId: 'demo_user1',
+        title: 'Large Pothole on Main Street',
+        description:
+            'A dangerous pothole has formed near the intersection of Main Street and Oak Avenue. It\'s causing traffic issues and poses a safety hazard, especially during rainy weather when it\'s hard to see. The hole is approximately 2 feet wide and 6 inches deep.',
+        category: 'Infrastructure',
+        status: 'pending',
+        latitude: 12.9716,
+        longitude: 77.5946,
+        address: 'Main St & Oak Ave, Springfield',
+        imageUrls: ['assets/images/pothole.jpg'],
+        upvotes: 24,
+        downvotes: 3,
+        weightedScore: 28.5,
+        isInGracePeriod: false,
+        gracePeriodEnds: DateTime.now().subtract(const Duration(days: 2)),
+        createdAt: DateTime.now().subtract(const Duration(days: 3)),
+        updatedAt: DateTime.now().subtract(const Duration(hours: 6)),
+        priority: 'high',
+      ),
+      ReportModel(
+        id: 'demo_2',
+        userId: 'demo_user2',
+        title: 'Broken Streetlight at Park Entrance',
+        description:
+            'The streetlight at the main park entrance has been out for over two weeks, creating a safety hazard for evening joggers, dog walkers, and families. The area is completely dark after sunset.',
+        category: 'Safety',
+        status: 'in_progress',
+        latitude: 12.9726,
+        longitude: 77.5956,
+        address: 'Central Park Entrance, Springfield',
+        imageUrls: ['assets/images/broken-streetlight.png'],
+        upvotes: 18,
+        downvotes: 1,
+        weightedScore: 19.5,
+        isUrgent: true,
+        isInGracePeriod: false,
+        gracePeriodEnds: DateTime.now().subtract(const Duration(days: 1)),
+        createdAt: DateTime.now().subtract(const Duration(days: 2)),
+        updatedAt: DateTime.now().subtract(const Duration(hours: 4)),
+        priority: 'high',
+        assignedAgentName: 'John Smith',
+        progressUpdates: ['Investigation started', 'Parts ordered'],
+      ),
+      ReportModel(
+        id: 'demo_3',
+        userId: 'demo_user3',
+        title: 'Overflowing Garbage Bins in Residential Area',
+        description:
+            'Multiple garbage bins on Elm Street have been overflowing for days. This is attracting pests and creating an unsanitary environment for residents. The garbage collection seems to have missed this area.',
+        category: 'Environment',
+        status: 'pending',
+        latitude: 12.9706,
+        longitude: 77.5936,
+        address: 'Elm Street, Residential Block',
+        imageUrls: ['assets/images/garbage.jpg'],
+        upvotes: 12,
+        downvotes: 0,
+        weightedScore: 14.0,
+        isInGracePeriod: true,
+        gracePeriodEnds: DateTime.now().add(const Duration(hours: 8)),
+        createdAt: DateTime.now().subtract(const Duration(hours: 16)),
+        updatedAt: DateTime.now().subtract(const Duration(hours: 16)),
+        priority: 'medium',
+      ),
+      ReportModel(
+        id: 'demo_4',
+        userId: 'demo_user4',
+        title: 'Graffiti on Public Building Wall',
+        description:
+            'Vandalism has occurred on the side wall of the community center. The graffiti is inappropriate and needs to be removed to maintain the area\'s appearance and community standards.',
+        category: 'Public Services',
+        status: 'resolved',
+        latitude: 12.9696,
+        longitude: 77.5926,
+        address: 'Community Center, West Side',
+        imageUrls: ['assets/images/graffiti.jpg'],
+        upvotes: 8,
+        downvotes: 2,
+        weightedScore: 7.5,
+        isInGracePeriod: false,
+        gracePeriodEnds: DateTime.now().subtract(const Duration(days: 5)),
+        createdAt: DateTime.now().subtract(const Duration(days: 7)),
+        updatedAt: DateTime.now().subtract(const Duration(days: 1)),
+        priority: 'low',
+        assignedAgentName: 'Sarah Johnson',
+        progressUpdates: [
+          'Report acknowledged',
+          'Cleaning scheduled',
+          'Graffiti removed',
+        ],
+      ),
+      ReportModel(
+        id: 'demo_5',
+        userId: 'demo_user5',
+        title: 'Malfunctioning Traffic Light at Busy Intersection',
+        description:
+            'The traffic light at the intersection of First Avenue and Main Street is stuck on red in all directions, causing significant traffic backup during rush hours.',
+        category: 'Transportation',
+        status: 'in_progress',
+        latitude: 12.9736,
+        longitude: 77.5966,
+        address: 'First Ave & Main St Intersection',
+        imageUrls: ['assets/images/streetlight.jpg'],
+        upvotes: 35,
+        downvotes: 1,
+        weightedScore: 42.0,
+        isUrgent: true,
+        isInGracePeriod: false,
+        gracePeriodEnds: DateTime.now().subtract(const Duration(hours: 12)),
+        createdAt: DateTime.now().subtract(const Duration(days: 1)),
+        updatedAt: DateTime.now().subtract(const Duration(hours: 2)),
+        priority: 'urgent',
+        assignedAgentName: 'Mike Wilson',
+        assignedAgentPhone: '(555) 123-4567',
+        progressUpdates: [
+          'Emergency response dispatched',
+          'Technician on site',
+          'Repair in progress',
+        ],
+      ),
+    ];
+  }
+
+  // Storage methods for user reports persistence
+  static const String _userReportsKey = 'user_reports';
+
+  Future<void> _saveUserReportToStorage(ReportModel report) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final existingReportsJson = prefs.getString(_userReportsKey) ?? '[]';
+      final List<dynamic> existingReports = jsonDecode(existingReportsJson);
+
+      // Add new report
+      existingReports.insert(0, report.toJson());
+
+      // Save back to storage
+      await prefs.setString(_userReportsKey, jsonEncode(existingReports));
+      debugPrint('User report saved to storage successfully');
+    } catch (e) {
+      debugPrint('Error saving report to storage: $e');
+    }
+  }
+
+  Future<List<ReportModel>> _loadUserReportsFromStorage() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final reportsJson = prefs.getString(_userReportsKey);
+
+      if (reportsJson != null) {
+        final List<dynamic> reportsList = jsonDecode(reportsJson);
+        return reportsList.map((json) => ReportModel.fromJson(json)).toList();
+      }
+    } catch (e) {
+      debugPrint('Error loading reports from storage: $e');
+    }
+    return [];
+  }
+
+  Future<void> clearUserReports() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_userReportsKey);
+      debugPrint('User reports cleared from storage');
+    } catch (e) {
+      debugPrint('Error clearing user reports: $e');
     }
   }
 }
