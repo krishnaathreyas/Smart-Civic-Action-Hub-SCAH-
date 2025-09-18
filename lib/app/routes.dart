@@ -2,12 +2,12 @@ import 'package:go_router/go_router.dart';
 
 import '../presentation/providers/auth_provider.dart';
 import '../presentation/screens/auth/sign_in_screen.dart';
-import '../presentation/screens/dashboard/home_screen.dart';
+import '../presentation/screens/dashboard/enhanced_dashboard_screen.dart';
 import '../presentation/screens/onboarding/permissions_screen.dart';
 import '../presentation/screens/onboarding/profile_creation_screen.dart';
 import '../presentation/screens/onboarding/tutorial_screen.dart';
 import '../presentation/screens/onboarding/welcome_screen.dart';
-import '../presentation/screens/profile/profile_screen.dart';
+import '../presentation/screens/profile/user_profile_screen.dart';
 import '../presentation/screens/report/report_detail_screen.dart';
 import '../presentation/screens/report/report_submission_screen.dart';
 
@@ -67,7 +67,7 @@ class AppRouter {
       GoRoute(
         path: '/home',
         name: 'home',
-        builder: (context, state) => const HomeScreen(),
+        builder: (context, state) => const EnhancedDashboardScreen(),
       ),
       GoRoute(
         path: '/report-detail/:id',
@@ -81,9 +81,14 @@ class AppRouter {
         builder: (context, state) => const ReportSubmissionScreen(),
       ),
       GoRoute(
+        path: '/report-submission',
+        name: 'report-submission',
+        builder: (context, state) => const ReportSubmissionScreen(),
+      ),
+      GoRoute(
         path: '/profile',
         name: 'profile',
-        builder: (context, state) => const ProfileScreen(),
+        builder: (context, state) => const UserProfileScreen(),
       ),
     ],
   );

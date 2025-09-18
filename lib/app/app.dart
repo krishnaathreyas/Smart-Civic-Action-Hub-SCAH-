@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+
 import '../core/theme/app_theme.dart';
 import '../presentation/providers/auth_provider.dart';
-import '../presentation/providers/report_provider.dart';
 import '../presentation/providers/location_provider.dart';
+import '../presentation/providers/report_provider.dart';
 import 'routes.dart';
 
 class SCAHApp extends StatelessWidget {

@@ -38,6 +38,7 @@ dependencies:
   flutter_svg: ^2.0.9
   cached_network_image: ^3.3.0
   shimmer: ^3.0.0
+  fl_chart: ^0.68.0
   
   # Permissions
   permission_handler: ^11.1.0
@@ -54,3 +55,11 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.1
+
+# Flutter configuration
+flutter:
+  uses-material-design: true
+  
+  # Assets
+  assets:
+    - assets/images/

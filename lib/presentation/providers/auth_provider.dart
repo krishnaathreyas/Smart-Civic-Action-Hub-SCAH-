@@ -42,6 +42,7 @@ class AuthProvider extends ChangeNotifier {
   Future<void> createProfile({
     required String name,
     required String email,
+    required String password,
     String? phoneNumber,
     required String homeAddress,
     required String municipalWard,
@@ -50,6 +51,12 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // Check if email already exists
+      final emailExists = await StorageService.emailExists(email);
+      if (emailExists) {
+        throw Exception('An account with this email already exists');
+      }
+
       // In a real app, this would make an API call
       await Future.delayed(const Duration(seconds: 2));
 
@@ -57,6 +64,7 @@ class AuthProvider extends ChangeNotifier {
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         name: name,
         email: email,
+        password: password,
         phoneNumber: phoneNumber,
         homeAddress: homeAddress,
         municipalWard: municipalWard,
@@ -68,7 +76,9 @@ class AuthProvider extends ChangeNotifier {
       _isAuthenticated = true;
       _isOnboardingComplete = true;
 
-      // Save to local storage
+      // Save to users database for authentication
+      await StorageService.saveUserToDatabase(user);
+      // Save as current user session
       await StorageService.saveUser(user);
     } catch (e) {
       debugPrint('Error creating profile: $e');
@@ -113,24 +123,18 @@ class AuthProvider extends ChangeNotifier {
       // Simulate API delay
       await Future.delayed(const Duration(seconds: 1));
 
-      // For demo purposes, create a mock signed-in user
-      // In real app, this would validate credentials with backend
-      final user = UserModel(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        name: "Demo User",
-        email: email,
-        phoneNumber: "+1234567890",
-        homeAddress: "123 Demo Street, Demo City",
-        municipalWard: "Ward 1",
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
+      // Validate credentials against stored users
+      final user = await StorageService.validateCredentials(email, password);
+
+      if (user == null) {
+        throw Exception('Invalid email or password');
+      }
 
       _currentUser = user;
       _isAuthenticated = true;
       _isOnboardingComplete = true;
 
-      // Save to local storage
+      // Save as current user session
       await StorageService.saveUser(user);
     } catch (e) {
       debugPrint('Error signing in: $e');
@@ -139,9 +143,8 @@ class AuthProvider extends ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
-  }
+  } // Simulate login process (legacy method)
 
-  // Simulate login process (legacy method)
   Future<void> startLogin() async {
     _isLoading = true;
     notifyListeners();

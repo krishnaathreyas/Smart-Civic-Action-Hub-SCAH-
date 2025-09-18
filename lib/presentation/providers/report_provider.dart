@@ -1,9 +1,11 @@
 // presentation/providers/report_provider.dart
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../core/constants/app_constants.dart';
 import '../../data/models/report_model.dart';
 import '../../data/models/vote_model.dart';
-import '../../data/models/comment_model.dart';
-import '../../core/constants/app_constants.dart';
+import 'auth_provider.dart';
 
 class ReportProvider extends ChangeNotifier {
   List<ReportModel> _reports = [];
@@ -17,6 +19,11 @@ class ReportProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String get sortBy => _sortBy;
   String? get filterByCategory => _filterByCategory;
+
+  // Get reports by user ID
+  List<ReportModel> getReportsByUserId(String userId) {
+    return _reports.where((report) => report.userId == userId).toList();
+  }
 
   List<ReportModel> _getFilteredAndSortedReports() {
     var filteredReports = _reports;
@@ -75,6 +82,7 @@ class ReportProvider extends ChangeNotifier {
   }
 
   Future<void> submitReport({
+    required BuildContext context,
     required String title,
     required String description,
     required String category,
@@ -89,12 +97,16 @@ class ReportProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // Get current user from AuthProvider first
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final currentUser = authProvider.currentUser;
+
       // Simulate API call
       await Future.delayed(const Duration(seconds: 2));
 
       final report = ReportModel(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
-        userId: 'current_user_id', // Would come from auth provider
+        userId: currentUser?.id ?? 'anonymous',
         title: title,
         description: description,
         category: category,

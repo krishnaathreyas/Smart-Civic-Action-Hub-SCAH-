@@ -3,6 +3,7 @@ class UserModel {
   final String id;
   final String name;
   final String email;
+  final String password; // Added password field
   final String? phoneNumber;
   final String? profileImageUrl;
   final String homeAddress;
@@ -17,6 +18,7 @@ class UserModel {
     required this.id,
     required this.name,
     required this.email,
+    required this.password,
     this.phoneNumber,
     this.profileImageUrl,
     required this.homeAddress,
@@ -33,6 +35,7 @@ class UserModel {
       id: json['id'],
       name: json['name'],
       email: json['email'],
+      password: json['password'],
       phoneNumber: json['phoneNumber'],
       profileImageUrl: json['profileImageUrl'],
       homeAddress: json['homeAddress'],
@@ -50,6 +53,7 @@ class UserModel {
       'id': id,
       'name': name,
       'email': email,
+      'password': password,
       'phoneNumber': phoneNumber,
       'profileImageUrl': profileImageUrl,
       'homeAddress': homeAddress,
@@ -65,6 +69,7 @@ class UserModel {
   UserModel copyWith({
     String? name,
     String? email,
+    String? password,
     String? phoneNumber,
     String? profileImageUrl,
     String? homeAddress,
@@ -78,6 +83,7 @@ class UserModel {
       id: id,
       name: name ?? this.name,
       email: email ?? this.email,
+      password: password ?? this.password,
       phoneNumber: phoneNumber ?? this.phoneNumber,
       profileImageUrl: profileImageUrl ?? this.profileImageUrl,
       homeAddress: homeAddress ?? this.homeAddress,
