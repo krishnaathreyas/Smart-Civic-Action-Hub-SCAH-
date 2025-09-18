@@ -1,7 +1,7 @@
 // presentation/providers/location_provider.dart
 import 'package:flutter/foundation.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
 
 class LocationProvider extends ChangeNotifier {
   Position? _currentPosition;
@@ -57,7 +57,10 @@ class LocationProvider extends ChangeNotifier {
   }
 
   Future<void> _getAddressFromCoordinates() async {
-    if (_currentPosition == null) return;
+    if (_currentPosition == null) {
+      _currentAddress = 'Location not available';
+      return;
+    }
 
     try {
       List<Placemark> placemarks = await placemarkFromCoordinates(
@@ -67,8 +70,14 @@ class LocationProvider extends ChangeNotifier {
 
       if (placemarks.isNotEmpty) {
         final place = placemarks.first;
-        _currentAddress =
-            '${place.street}, ${place.locality}, ${place.administrativeArea}';
+        // Build address with null safety
+        final street = place.street ?? 'Unknown Street';
+        final locality = place.locality ?? 'Unknown Area';
+        final adminArea = place.administrativeArea ?? 'Unknown Region';
+
+        _currentAddress = '$street, $locality, $adminArea';
+      } else {
+        _currentAddress = 'Address not found';
       }
     } catch (e) {
       debugPrint('Error getting address: $e');
@@ -87,12 +96,17 @@ class LocationProvider extends ChangeNotifier {
       );
       if (placemarks.isNotEmpty) {
         final place = placemarks.first;
-        return '${place.street}, ${place.locality}, ${place.administrativeArea}';
+        // Build address with null safety
+        final street = place.street ?? 'Unknown Street';
+        final locality = place.locality ?? 'Unknown Area';
+        final adminArea = place.administrativeArea ?? 'Unknown Region';
+
+        return '$street, $locality, $adminArea';
       }
     } catch (e) {
       debugPrint('Error getting address from coordinates: $e');
     }
-    return null;
+    return 'Address not available';
   }
 
   double? calculateDistance(

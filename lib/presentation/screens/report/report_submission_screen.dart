@@ -1,6 +1,4 @@
 // presentation/screens/report/report_submission_screen.dart
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,6 +8,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../providers/location_provider.dart';
 import '../../providers/report_provider.dart';
+import '../../widgets/cross_platform_image.dart';
 
 class ReportSubmissionScreen extends StatefulWidget {
   const ReportSubmissionScreen({Key? key}) : super(key: key);
@@ -27,7 +26,7 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
   String _selectedCategory = AppConstants.reportCategories.first;
   bool _isUrgent = false;
   bool _isSubmitting = false;
-  List<File> _selectedImages = [];
+  List<XFile> _selectedImages = [];
 
   @override
   void initState() {
@@ -58,7 +57,7 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
 
       if (image != null) {
         setState(() {
-          _selectedImages.add(File(image.path));
+          _selectedImages.add(image);
         });
       }
     } catch (e) {
@@ -75,8 +74,12 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
       );
 
       if (images.isNotEmpty) {
+        // Limit to 5 images total
+        final remainingSlots = 5 - _selectedImages.length;
+        final imagesToAdd = images.take(remainingSlots).toList();
+
         setState(() {
-          _selectedImages.addAll(images.map((image) => File(image.path)));
+          _selectedImages.addAll(imagesToAdd);
         });
       }
     } catch (e) {
@@ -514,11 +517,11 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
                                           borderRadius: BorderRadius.circular(
                                             8,
                                           ),
-                                          child: Image.file(
-                                            _selectedImages[index],
-                                            fit: BoxFit.cover,
+                                          child: CrossPlatformImage(
+                                            imageFile: _selectedImages[index],
                                             width: double.infinity,
                                             height: double.infinity,
+                                            fit: BoxFit.cover,
                                           ),
                                         ),
                                         Positioned(

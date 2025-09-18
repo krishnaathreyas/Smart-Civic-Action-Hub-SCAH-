@@ -1,5 +1,4 @@
 // presentation/widgets/enhanced_report_card.dart
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -50,18 +49,7 @@ class EnhancedReportCard extends StatelessWidget {
               // Background Image
               if (hasImage)
                 Positioned.fill(
-                  child: CachedNetworkImage(
-                    imageUrl: report.imageUrls.first,
-                    fit: BoxFit.cover,
-                    errorWidget: (context, url, error) => Container(
-                      color: AppTheme.lightGray.withOpacity(0.3),
-                      child: Icon(
-                        Icons.image_not_supported,
-                        color: AppTheme.mediumGray,
-                        size: 32,
-                      ),
-                    ),
-                  ),
+                  child: _buildReportImage(report.imageUrls.first),
                 ),
 
               // Gradient Overlay
@@ -422,6 +410,52 @@ class EnhancedReportCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _buildReportImage(String imageUrl) {
+    // Check if it's an asset image or network image
+    if (imageUrl.startsWith('assets/')) {
+      return Image.asset(
+        imageUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => Container(
+          color: AppTheme.lightGray.withOpacity(0.3),
+          child: Icon(
+            Icons.image_not_supported,
+            color: AppTheme.mediumGray,
+            size: 32,
+          ),
+        ),
+      );
+    } else {
+      // Network image - for user uploaded images
+      return Image.network(
+        imageUrl,
+        fit: BoxFit.cover,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return Container(
+            color: AppTheme.lightGray.withOpacity(0.3),
+            child: Center(
+              child: CircularProgressIndicator(
+                value: loadingProgress.expectedTotalBytes != null
+                    ? loadingProgress.cumulativeBytesLoaded /
+                          loadingProgress.expectedTotalBytes!
+                    : null,
+              ),
+            ),
+          );
+        },
+        errorBuilder: (context, error, stackTrace) => Container(
+          color: AppTheme.lightGray.withOpacity(0.3),
+          child: Icon(
+            Icons.image_not_supported,
+            color: AppTheme.mediumGray,
+            size: 32,
+          ),
+        ),
+      );
+    }
   }
 
   String _formatDate(DateTime date) {
