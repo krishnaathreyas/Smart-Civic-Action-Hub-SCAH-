@@ -1,6 +1,9 @@
 // presentation/screens/report/report_submission_screen.dart
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_constants.dart';
@@ -19,10 +22,12 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final ImagePicker _picker = ImagePicker();
 
   String _selectedCategory = AppConstants.reportCategories.first;
   bool _isUrgent = false;
   bool _isSubmitting = false;
+  List<File> _selectedImages = [];
 
   @override
   void initState() {
@@ -40,6 +45,120 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
     if (locationProvider.currentPosition == null) {
       await locationProvider.getCurrentLocation();
     }
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: source,
+        imageQuality: 80,
+        maxWidth: 1920,
+        maxHeight: 1080,
+      );
+
+      if (image != null) {
+        setState(() {
+          _selectedImages.add(File(image.path));
+        });
+      }
+    } catch (e) {
+      _showErrorSnackBar('Failed to pick image: $e');
+    }
+  }
+
+  Future<void> _pickMultipleImages() async {
+    try {
+      final List<XFile> images = await _picker.pickMultiImage(
+        imageQuality: 80,
+        maxWidth: 1920,
+        maxHeight: 1080,
+      );
+
+      if (images.isNotEmpty) {
+        setState(() {
+          _selectedImages.addAll(images.map((image) => File(image.path)));
+        });
+      }
+    } catch (e) {
+      _showErrorSnackBar('Failed to pick images: $e');
+    }
+  }
+
+  void _removeImage(int index) {
+    setState(() {
+      _selectedImages.removeAt(index);
+    });
+  }
+
+  void _showImagePickerDialog() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Add Photos',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildImageSourceButton(
+                    icon: Icons.camera_alt,
+                    label: 'Camera',
+                    onTap: () {
+                      Navigator.pop(context);
+                      _pickImage(ImageSource.camera);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildImageSourceButton(
+                    icon: Icons.photo_library,
+                    label: 'Gallery',
+                    onTap: () {
+                      Navigator.pop(context);
+                      _pickMultipleImages();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImageSourceButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppTheme.lightGray,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 32, color: AppTheme.primaryBlue),
+            const SizedBox(height: 8),
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -73,13 +192,18 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
         listen: false,
       );
 
+      // Convert File paths to strings for demo purposes
+      final imageUrls = _selectedImages.map((file) => file.path).toList();
+
       await reportProvider.submitReport(
+        context: context,
         title: _titleController.text.trim(),
         description: _descriptionController.text.trim(),
         category: _selectedCategory,
         latitude: locationProvider.currentPosition!.latitude,
         longitude: locationProvider.currentPosition!.longitude,
         address: locationProvider.currentAddress ?? 'Address not available',
+        imageUrls: imageUrls,
         isUrgent: _isUrgent,
       );
 
@@ -321,6 +445,126 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
                         }
                         return null;
                       },
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // Image upload section
+                    Text(
+                      'Photos (Optional)',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: AppTheme.lightGray),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        children: [
+                          if (_selectedImages.isEmpty)
+                            Column(
+                              children: [
+                                Icon(
+                                  Icons.add_a_photo_outlined,
+                                  size: 48,
+                                  color: AppTheme.mediumGray,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Add photos to help illustrate the issue',
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(color: AppTheme.mediumGray),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 16),
+                                ElevatedButton.icon(
+                                  onPressed: _showImagePickerDialog,
+                                  icon: const Icon(Icons.camera_alt),
+                                  label: const Text('Add Photos'),
+                                  style: ElevatedButton.styleFrom(
+                                    foregroundColor: AppTheme.primaryBlue,
+                                    backgroundColor: AppTheme.lightGray,
+                                  ),
+                                ),
+                              ],
+                            )
+                          else
+                            Column(
+                              children: [
+                                // Image grid
+                                GridView.builder(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  gridDelegate:
+                                      const SliverGridDelegateWithFixedCrossAxisCount(
+                                        crossAxisCount: 3,
+                                        crossAxisSpacing: 8,
+                                        mainAxisSpacing: 8,
+                                      ),
+                                  itemCount: _selectedImages.length,
+                                  itemBuilder: (context, index) {
+                                    return Stack(
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          child: Image.file(
+                                            _selectedImages[index],
+                                            fit: BoxFit.cover,
+                                            width: double.infinity,
+                                            height: double.infinity,
+                                          ),
+                                        ),
+                                        Positioned(
+                                          top: 4,
+                                          right: 4,
+                                          child: GestureDetector(
+                                            onTap: () => _removeImage(index),
+                                            child: Container(
+                                              padding: const EdgeInsets.all(4),
+                                              decoration: BoxDecoration(
+                                                color: Colors.black.withOpacity(
+                                                  0.6,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                              ),
+                                              child: const Icon(
+                                                Icons.close,
+                                                color: Colors.white,
+                                                size: 16,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
+                                const SizedBox(height: 16),
+                                // Add more photos button
+                                if (_selectedImages.length < 5)
+                                  OutlinedButton.icon(
+                                    onPressed: _showImagePickerDialog,
+                                    icon: const Icon(Icons.add),
+                                    label: const Text('Add More Photos'),
+                                  ),
+                                if (_selectedImages.length >= 5)
+                                  Text(
+                                    'Maximum 5 photos allowed',
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(color: AppTheme.mediumGray),
+                                  ),
+                              ],
+                            ),
+                        ],
+                      ),
                     ),
 
                     const SizedBox(height: 16),

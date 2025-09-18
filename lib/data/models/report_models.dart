@@ -22,6 +22,13 @@ class ReportModel {
   final DateTime createdAt;
   final DateTime updatedAt;
   final UserModel? reporter;
+  final String? assignedAgentId;
+  final String? assignedAgentName;
+  final String? assignedAgentPhone;
+  final String? assignedAgentEmail;
+  final List<String> progressUpdates;
+  final int viewCount;
+  final String priority;
 
   ReportModel({
     required this.id,
@@ -44,6 +51,13 @@ class ReportModel {
     required this.createdAt,
     required this.updatedAt,
     this.reporter,
+    this.assignedAgentId,
+    this.assignedAgentName,
+    this.assignedAgentPhone,
+    this.assignedAgentEmail,
+    this.progressUpdates = const [],
+    this.viewCount = 0,
+    this.priority = 'medium',
   });
 
   factory ReportModel.fromJson(Map<String, dynamic> json) {
@@ -70,6 +84,13 @@ class ReportModel {
       reporter: json['reporter'] != null
           ? UserModel.fromJson(json['reporter'])
           : null,
+      assignedAgentId: json['assignedAgentId'],
+      assignedAgentName: json['assignedAgentName'],
+      assignedAgentPhone: json['assignedAgentPhone'],
+      assignedAgentEmail: json['assignedAgentEmail'],
+      progressUpdates: List<String>.from(json['progressUpdates'] ?? []),
+      viewCount: json['viewCount'] ?? 0,
+      priority: json['priority'] ?? 'medium',
     );
   }
 
@@ -95,6 +116,13 @@ class ReportModel {
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
       'reporter': reporter?.toJson(),
+      'assignedAgentId': assignedAgentId,
+      'assignedAgentName': assignedAgentName,
+      'assignedAgentPhone': assignedAgentPhone,
+      'assignedAgentEmail': assignedAgentEmail,
+      'progressUpdates': progressUpdates,
+      'viewCount': viewCount,
+      'priority': priority,
     };
   }
 
