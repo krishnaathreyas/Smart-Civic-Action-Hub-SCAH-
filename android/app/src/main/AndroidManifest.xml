@@ -1,9 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-<!-- ✅ Location permissions go here -->
+    <!-- ✅ Location permissions go here -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <!-- Optional: if you need background location -->
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>    
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
     <application
         android:label="scah"
         android:name="${applicationName}"
