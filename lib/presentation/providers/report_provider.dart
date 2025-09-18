@@ -1,13 +1,14 @@
-// presentation/providers/report_provider.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../data/models/report_model.dart';
 import '../../data/models/vote_model.dart';
+import '../../data/services/civic_report_api_client.dart';
 import 'auth_provider.dart';
 
 class ReportProvider extends ChangeNotifier {
+  final CivicReportApiClient _apiClient = CivicReportApiClient();
   List<ReportModel> _reports = [];
   List<VoteModel> _userVotes = [];
   bool _isLoading = false;
@@ -70,9 +71,37 @@ class ReportProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Simulate API call with mock data
-      await Future.delayed(const Duration(seconds: 2));
-      _reports = _generateMockReports();
+      // Get reports from all departments
+      final departments = await _apiClient.getDepartments();
+      _reports.clear();
+
+      for (var department in departments) {
+        final response = await _apiClient.getDepartmentReports(department);
+        final departmentReports = response['reports'] as List;
+
+        for (var report in departmentReports) {
+          _reports.add(
+            ReportModel(
+              id: report['id'],
+              userId: 'system', // Update with actual user ID when available
+              title: report['content'].split('\n')[0], // First line as title
+              description: report['content'],
+              category: report['metadata']['category'] ?? 'Uncategorized',
+              latitude: report['metadata']['location']?['latitude'] ?? 0.0,
+              longitude: report['metadata']['location']?['longitude'] ?? 0.0,
+              address: report['metadata']['location']?['address'] ?? '',
+              imageUrls: [], // Add image support in backend
+              isUrgent: report['metadata']['urgency'] == 'high',
+              status: report['metadata']['status'] ?? 'pending',
+              gracePeriodEnds: DateTime.now().add(
+                AppConstants.votingGracePeriod,
+              ),
+              createdAt: DateTime.now(), // Add timestamp in backend
+              updatedAt: DateTime.now(),
+            ),
+          );
+        }
+      }
     } catch (e) {
       debugPrint('Error loading reports: $e');
     }
@@ -97,13 +126,28 @@ class ReportProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Get current user from AuthProvider first
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final currentUser = authProvider.currentUser;
 
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 2));
+      // Determine department based on category
+      String department = _getDepartmentForCategory(category);
 
+      // Submit to API
+      await _apiClient.submitReport(
+        title: title,
+        description: description,
+        department: department,
+        category: category,
+        urgency: isUrgent ? 'high' : 'normal',
+        location: {
+          'latitude': latitude,
+          'longitude': longitude,
+          'address': address,
+        },
+        imageUrls: imageUrls,
+      );
+
+      // Add to local state
       final report = ReportModel(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         userId: currentUser?.id ?? 'anonymous',
@@ -129,6 +173,27 @@ class ReportProvider extends ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
+  }
+
+  String _getDepartmentForCategory(String category) {
+    // Map categories to departments
+    switch (category.toLowerCase()) {
+      case 'roads':
+      case 'garbage':
+      case 'parks':
+        return 'BBMP';
+      case 'electricity':
+      case 'power':
+        return 'BESCOM';
+      case 'traffic':
+      case 'accidents':
+        return 'BTP';
+      case 'water':
+      case 'sewage':
+        return 'BWHSP';
+      default:
+        return 'BBMP'; // Default department
+    }
   }
 
   Future<void> voteOnReport({
@@ -231,49 +296,5 @@ class ReportProvider extends ChangeNotifier {
     } catch (e) {
       return null;
     }
-  }
-
-  List<ReportModel> _generateMockReports() {
-    return [
-      ReportModel(
-        id: '1',
-        userId: 'user1',
-        title: 'Pothole on Main Street',
-        description:
-            'A large pothole has formed near the intersection of Main Street and Oak Avenue. It\'s causing traffic issues and poses a safety hazard, especially during rainy weather when it\'s hard to see.',
-        category: 'Roads & Infrastructure',
-        latitude: 12.9716,
-        longitude: 77.5946,
-        address: 'Main St & Oak Ave, Springfield',
-        imageUrls: ['https://example.com/pothole1.jpg'],
-        upvotes: 15,
-        downvotes: 2,
-        weightedScore: 18.5,
-        isInGracePeriod: false,
-        gracePeriodEnds: DateTime.now().subtract(const Duration(hours: 2)),
-        createdAt: DateTime.now().subtract(const Duration(hours: 3)),
-        updatedAt: DateTime.now().subtract(const Duration(hours: 1)),
-      ),
-      ReportModel(
-        id: '2',
-        userId: 'user2',
-        title: 'Broken Streetlight at Park Entrance',
-        description:
-            'The streetlight at the park entrance has been out for weeks, making it unsafe for evening joggers and families.',
-        category: 'Street Lighting',
-        latitude: 12.9716,
-        longitude: 77.5946,
-        address: 'Central Park Entrance, Springfield',
-        imageUrls: ['https://example.com/streetlight1.jpg'],
-        upvotes: 8,
-        downvotes: 1,
-        weightedScore: 7.5,
-        isUrgent: true,
-        isInGracePeriod: true,
-        gracePeriodEnds: DateTime.now().add(const Duration(minutes: 15)),
-        createdAt: DateTime.now().subtract(const Duration(minutes: 15)),
-        updatedAt: DateTime.now().subtract(const Duration(minutes: 15)),
-      ),
-    ];
   }
 }
