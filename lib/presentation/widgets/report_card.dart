@@ -12,8 +12,7 @@ class ReportCard extends StatelessWidget {
   final ReportModel report;
   final VoidCallback? onTap;
 
-  const ReportCard({Key? key, required this.report, this.onTap})
-    : super(key: key);
+  const ReportCard({super.key, required this.report, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -42,12 +41,12 @@ class ReportCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: AppUtils.getStatusColor(
                         report.status,
-                      ).withOpacity(0.1),
+                      ).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(
                         color: AppUtils.getStatusColor(
                           report.status,
-                        ).withOpacity(0.3),
+                        ).withValues(alpha: 0.3),
                       ),
                     ),
                     child: Text(
@@ -126,7 +125,7 @@ class ReportCard extends StatelessWidget {
               // Category and Location
               Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.category_outlined,
                     size: 16,
                     color: AppTheme.mediumGray,
@@ -139,7 +138,7 @@ class ReportCard extends StatelessWidget {
                     ).textTheme.bodySmall?.copyWith(color: AppTheme.mediumGray),
                   ),
                   const SizedBox(width: 16),
-                  Icon(
+                  const Icon(
                     Icons.location_on_outlined,
                     size: 16,
                     color: AppTheme.mediumGray,
@@ -174,8 +173,9 @@ class ReportCard extends StatelessWidget {
                         ? 3
                         : report.imageUrls.length,
                     itemBuilder: (context, index) {
-                      if (index >= report.imageUrls.length)
+                      if (index >= report.imageUrls.length) {
                         return const SizedBox.shrink();
+                      }
                       return Container(
                         margin: const EdgeInsets.only(right: 8),
                         width: 60,
@@ -242,7 +242,7 @@ class ReportCard extends StatelessWidget {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: AppTheme.primaryBlue.withOpacity(0.1),
+                        color: AppTheme.primaryBlue.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
@@ -272,7 +272,8 @@ class ReportCard extends StatelessWidget {
   }) {
     return Consumer2<ReportProvider, AuthProvider>(
       builder: (context, reportProvider, authProvider, child) {
-        final userVote = reportProvider.getUserVoteForReport(report.id);
+        final uid = authProvider.currentUser?.id ?? 'anon';
+        final userVote = reportProvider.getUserVoteForReport(report.id, uid);
         final hasVoted = userVote != null;
         final isCurrentVoteType = hasVoted && userVote.isUpvote == isUpvote;
 
@@ -289,7 +290,7 @@ class ReportCard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: isCurrentVoteType
                     ? (isUpvote ? AppTheme.successGreen : AppTheme.errorRed)
-                          .withOpacity(0.1)
+                          .withValues(alpha: 0.1)
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -339,6 +340,7 @@ class ReportCard extends StatelessWidget {
     try {
       await reportProvider.voteOnReport(
         reportId: report.id,
+        userId: user.id,
         isUpvote: isUpvote,
         voteWeight: user.voteWeight,
       );

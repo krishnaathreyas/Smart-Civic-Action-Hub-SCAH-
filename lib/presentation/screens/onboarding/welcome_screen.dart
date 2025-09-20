@@ -6,7 +6,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
 
 class WelcomeScreen extends StatelessWidget {
-  const WelcomeScreen({Key? key}) : super(key: key);
+  const WelcomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -140,7 +140,7 @@ class WelcomeScreen extends StatelessWidget {
                     // Navigate to sign-in screen
                     context.go('/sign-in');
                   },
-                  child: Text(
+                  child: const Text(
                     'Already have an account? Sign In',
                     style: TextStyle(
                       color: AppTheme.primaryBlue,

@@ -7,7 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 
 class ProfileCreationScreen extends StatefulWidget {
-  const ProfileCreationScreen({Key? key}) : super(key: key);
+  const ProfileCreationScreen({super.key});
 
   @override
   State<ProfileCreationScreen> createState() => _ProfileCreationScreenState();
@@ -317,7 +317,7 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> {
                   ),
                   child: Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.privacy_tip_outlined,
                         color: AppTheme.primaryBlue,
                         size: 24,
@@ -369,7 +369,7 @@ class _ProfileCreationScreenState extends State<ProfileCreationScreen> {
                     onPressed: () {
                       context.go('/sign-in');
                     },
-                    child: Text(
+                    child: const Text(
                       'Already have an account? Sign In',
                       style: TextStyle(
                         color: AppTheme.primaryBlue,

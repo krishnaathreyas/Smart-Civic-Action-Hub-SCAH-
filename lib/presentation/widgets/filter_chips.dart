@@ -7,7 +7,7 @@ import '../../core/theme/app_theme.dart';
 import '../providers/report_provider.dart';
 
 class FilterChips extends StatelessWidget {
-  const FilterChips({Key? key}) : super(key: key);
+  const FilterChips({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -200,7 +200,7 @@ class FilterChips extends StatelessWidget {
               ).textTheme.bodySmall?.copyWith(color: AppTheme.mediumGray),
             ),
             const SizedBox(width: 4),
-            Icon(Icons.expand_more, size: 16, color: AppTheme.mediumGray),
+            const Icon(Icons.expand_more, size: 16, color: AppTheme.mediumGray),
           ],
         ),
       ),
@@ -300,7 +300,7 @@ class FilterChips extends StatelessWidget {
         ),
       ),
       trailing: isSelected
-          ? Icon(Icons.check_circle, color: AppTheme.primaryBlue)
+          ? const Icon(Icons.check_circle, color: AppTheme.primaryBlue)
           : null,
       onTap: () {
         reportProvider.setFilterByCategory(value);

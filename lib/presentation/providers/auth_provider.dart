@@ -15,6 +15,13 @@ class AuthProvider extends ChangeNotifier {
   bool get isAuthenticated => _isAuthenticated;
   bool get isOnboardingComplete => _isOnboardingComplete;
   bool get isLoading => _isLoading;
+  // Simple admin check for demo: treat government domains as admin
+  bool get isAdmin {
+    final email = _currentUser?.email.toLowerCase();
+    if (email == null) return false;
+    // Simple demo rule: any *.gov or *@springfield.gov is admin
+    return email.endsWith('.gov') || email.endsWith('@springfield.gov');
+  }
 
   AuthProvider() {
     _loadUserFromStorage();

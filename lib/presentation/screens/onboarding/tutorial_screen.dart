@@ -6,7 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 
 class TutorialScreen extends StatefulWidget {
-  const TutorialScreen({Key? key}) : super(key: key);
+  const TutorialScreen({super.key});
 
   @override
   State<TutorialScreen> createState() => _TutorialScreenState();

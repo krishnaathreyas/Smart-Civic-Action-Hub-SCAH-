@@ -11,7 +11,7 @@ import '../../widgets/filter_chips.dart';
 import '../../widgets/report_card.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -153,7 +153,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           fit: BoxFit.cover,
                         ),
                       )
-                    : Icon(Icons.person, color: Colors.white, size: 20);
+                    : const Icon(Icons.person, color: Colors.white, size: 20);
               },
             ),
           ),

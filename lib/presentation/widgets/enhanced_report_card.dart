@@ -10,18 +10,24 @@ class EnhancedReportCard extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onUpvote;
   final VoidCallback? onDownvote;
+  final VoidCallback? onFollowToggle;
+  final bool isFollowed;
   final bool showScore;
   final bool isUserReport;
+  final int commentCount;
 
   const EnhancedReportCard({
-    Key? key,
+    super.key,
     required this.report,
     this.onTap,
     this.onUpvote,
     this.onDownvote,
+    this.onFollowToggle,
+    this.isFollowed = false,
     this.showScore = false,
     this.isUserReport = false,
-  }) : super(key: key);
+    this.commentCount = 0,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +42,7 @@ class EnhancedReportCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.08),
+              color: Colors.black.withValues(alpha: 0.08),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -60,8 +66,8 @@ class EnhancedReportCard extends StatelessWidget {
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        Colors.black.withOpacity(0.3),
-                        Colors.black.withOpacity(0.7),
+                        Colors.black.withValues(alpha: 0.3),
+                        Colors.black.withValues(alpha: 0.7),
                       ],
                     ),
                   ),
@@ -129,7 +135,7 @@ class EnhancedReportCard extends StatelessWidget {
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(
                                 color: hasImage
-                                    ? Colors.white.withOpacity(0.9)
+                                    ? Colors.white.withValues(alpha: 0.9)
                                     : AppTheme.mediumGray,
                                 height: 1.3,
                               ),
@@ -162,7 +168,7 @@ class EnhancedReportCard extends StatelessWidget {
                                   style: Theme.of(context).textTheme.bodySmall
                                       ?.copyWith(
                                         color: hasImage
-                                            ? Colors.white.withOpacity(0.8)
+                                            ? Colors.white.withValues(alpha: 0.8)
                                             : AppTheme.mediumGray,
                                       ),
                                   maxLines: 1,
@@ -181,7 +187,7 @@ class EnhancedReportCard extends StatelessWidget {
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(
                                 color: hasImage
-                                    ? Colors.white.withOpacity(0.8)
+                                    ? Colors.white.withValues(alpha: 0.8)
                                     : AppTheme.mediumGray,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -214,6 +220,53 @@ class EnhancedReportCard extends StatelessWidget {
 
                         const Spacer(),
 
+                        // Compact progress donut
+                        _buildProgressDonut(hasImage),
+                        const SizedBox(width: 12),
+
+                        // Follow toggle
+                        GestureDetector(
+                          onTap: onFollowToggle,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: hasImage
+                                  ? Colors.white.withValues(alpha: 0.2)
+                                  : AppTheme.lightGray,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  isFollowed
+                                      ? Icons.bookmark
+                                      : Icons.bookmark_outline,
+                                  size: 18,
+                                  color: hasImage
+                                      ? Colors.white
+                                      : AppTheme.darkGray,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  isFollowed ? 'Following' : 'Follow',
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: hasImage
+                                            ? Colors.white
+                                            : AppTheme.darkGray,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+
                         // Score (only for user's own reports)
                         if (showScore && isUserReport)
                           Container(
@@ -223,7 +276,7 @@ class EnhancedReportCard extends StatelessWidget {
                             ),
                             decoration: BoxDecoration(
                               color: (hasImage
-                                  ? Colors.white.withOpacity(0.2)
+                                  ? Colors.white.withValues(alpha: 0.2)
                                   : AppTheme.lightGray),
                               borderRadius: BorderRadius.circular(16),
                             ),
@@ -247,7 +300,7 @@ class EnhancedReportCard extends StatelessWidget {
                                 Icons.visibility,
                                 size: 16,
                                 color: hasImage
-                                    ? Colors.white.withOpacity(0.7)
+            ? Colors.white.withValues(alpha: 0.7)
                                     : AppTheme.mediumGray,
                               ),
                               const SizedBox(width: 4),
@@ -256,7 +309,25 @@ class EnhancedReportCard extends StatelessWidget {
                                 style: Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(
                                       color: hasImage
-                                          ? Colors.white.withOpacity(0.7)
+              ? Colors.white.withValues(alpha: 0.7)
+                                          : AppTheme.mediumGray,
+                                    ),
+                              ),
+                              const SizedBox(width: 10),
+                              Icon(
+                                Icons.chat_bubble_outline,
+                                size: 16,
+                                color: hasImage
+            ? Colors.white.withValues(alpha: 0.7)
+                                    : AppTheme.mediumGray,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '$commentCount',
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: hasImage
+              ? Colors.white.withValues(alpha: 0.7)
                                           : AppTheme.mediumGray,
                                     ),
                               ),
@@ -321,13 +392,13 @@ class EnhancedReportCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: AppTheme.primaryBlue.withOpacity(0.1),
+        color: AppTheme.primaryBlue.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.primaryBlue.withOpacity(0.3)),
+        border: Border.all(color: AppTheme.primaryBlue.withValues(alpha: 0.3)),
       ),
       child: Text(
         report.category,
-        style: TextStyle(
+        style: const TextStyle(
           color: AppTheme.primaryBlue,
           fontSize: 11,
           fontWeight: FontWeight.w600,
@@ -384,13 +455,13 @@ class EnhancedReportCard extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: (isUpvote
-              ? Colors.green.withOpacity(0.1)
-              : Colors.red.withOpacity(0.1)),
+              ? Colors.green.withValues(alpha: 0.1)
+              : Colors.red.withValues(alpha: 0.1)),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: (isUpvote
-                ? Colors.green.withOpacity(0.3)
-                : Colors.red.withOpacity(0.3)),
+                ? Colors.green.withValues(alpha: 0.3)
+                : Colors.red.withValues(alpha: 0.3)),
           ),
         ),
         child: Row(
@@ -419,8 +490,8 @@ class EnhancedReportCard extends StatelessWidget {
         imageUrl,
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) => Container(
-          color: AppTheme.lightGray.withOpacity(0.3),
-          child: Icon(
+          color: AppTheme.lightGray.withValues(alpha: 0.3),
+          child: const Icon(
             Icons.image_not_supported,
             color: AppTheme.mediumGray,
             size: 32,
@@ -435,7 +506,7 @@ class EnhancedReportCard extends StatelessWidget {
         loadingBuilder: (context, child, loadingProgress) {
           if (loadingProgress == null) return child;
           return Container(
-            color: AppTheme.lightGray.withOpacity(0.3),
+            color: AppTheme.lightGray.withValues(alpha: 0.3),
             child: Center(
               child: CircularProgressIndicator(
                 value: loadingProgress.expectedTotalBytes != null
@@ -447,8 +518,8 @@ class EnhancedReportCard extends StatelessWidget {
           );
         },
         errorBuilder: (context, error, stackTrace) => Container(
-          color: AppTheme.lightGray.withOpacity(0.3),
-          child: Icon(
+          color: AppTheme.lightGray.withValues(alpha: 0.3),
+          child: const Icon(
             Icons.image_not_supported,
             color: AppTheme.mediumGray,
             size: 32,
@@ -470,6 +541,67 @@ class EnhancedReportCard extends StatelessWidget {
       return '${difference}d ago';
     } else {
       return DateFormat('MMM dd').format(date);
+    }
+  }
+
+  Widget _buildProgressDonut(bool onImage) {
+    final progress = _statusToProgress(report.status);
+    final percent = (progress * 100).round();
+    final color = _statusColor(report.status);
+    return SizedBox(
+      width: 36,
+      height: 36,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          CircularProgressIndicator(
+            value: progress,
+            strokeWidth: 4,
+            color: color,
+            backgroundColor: onImage
+                ? Colors.white.withValues(alpha: 0.15)
+                : AppTheme.lightGray,
+          ),
+          Text(
+            '$percent%',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: onImage ? Colors.white : AppTheme.darkGray,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  double _statusToProgress(String status) {
+    switch (status.toLowerCase()) {
+      case 'pending':
+        return 0.25;
+      case 'in_progress':
+        return 0.65;
+      case 'resolved':
+        return 1.0;
+      case 'rejected':
+        return 0.0;
+      default:
+        return 0.1; // submitted/unknown
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'pending':
+        return Colors.orange;
+      case 'in_progress':
+        return Colors.blue;
+      case 'resolved':
+        return Colors.green;
+      case 'rejected':
+        return Colors.red;
+      default:
+        return AppTheme.primaryBlue;
     }
   }
 }

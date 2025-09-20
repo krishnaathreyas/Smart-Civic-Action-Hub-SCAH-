@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/services/storage_service.dart';
 
 class DebugStorageScreen extends StatefulWidget {
-  const DebugStorageScreen({Key? key}) : super(key: key);
+  const DebugStorageScreen({super.key});
 
   @override
   _DebugStorageScreenState createState() => _DebugStorageScreenState();

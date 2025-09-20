@@ -17,16 +17,29 @@ class AppRouter {
   AppRouter(this.authProvider);
 
   late final router = GoRouter(
-    initialLocation: '/welcome',
+    initialLocation: '/home',
     refreshListenable: authProvider,
     redirect: (context, state) {
       final isAuthenticated = authProvider.isAuthenticated;
       final isOnboardingComplete = authProvider.isOnboardingComplete;
+      final path = state.fullPath ?? state.uri.path;
+
+      // Guard certain routes that require authentication
+      const protectedPaths = {
+        '/submit-report',
+        '/report-submission',
+        '/profile',
+      };
+
+      if (!isAuthenticated && protectedPaths.contains(path)) {
+        final from = state.uri.toString();
+        return '/sign-in?from=$from';
+      }
 
       // If user is authenticated and onboarding is complete, redirect to home
       if (isAuthenticated &&
           isOnboardingComplete &&
-          (state.fullPath == '/welcome' || state.fullPath == '/')) {
+          (path == '/welcome' || path == '/')) {
         return '/home';
       }
 
@@ -43,7 +56,10 @@ class AppRouter {
       GoRoute(
         path: '/sign-in',
         name: 'sign-in',
-        builder: (context, state) => const SignInScreen(),
+        builder: (context, state) {
+          final from = state.uri.queryParameters['from'];
+          return SignInScreen(redirectTo: from);
+        },
       ),
 
       // Onboarding Routes

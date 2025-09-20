@@ -1,4 +1,6 @@
 // presentation/screens/report/report_submission_screen.dart
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -6,12 +8,16 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../data/models/report_models.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/location_provider.dart';
 import '../../providers/report_provider.dart';
 import '../../widgets/cross_platform_image.dart';
+import '../../widgets/image_annotation_editor.dart';
+import 'enhanced_report_detail_screen.dart';
 
 class ReportSubmissionScreen extends StatefulWidget {
-  const ReportSubmissionScreen({Key? key}) : super(key: key);
+  const ReportSubmissionScreen({super.key});
 
   @override
   State<ReportSubmissionScreen> createState() => _ReportSubmissionScreenState();
@@ -26,7 +32,8 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
   String _selectedCategory = AppConstants.reportCategories.first;
   bool _isUrgent = false;
   bool _isSubmitting = false;
-  List<XFile> _selectedImages = [];
+  final List<XFile> _selectedImages = [];
+  bool _showDuplicateSuggestions = true; // wizard step gate
 
   @override
   void initState() {
@@ -91,6 +98,27 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
     setState(() {
       _selectedImages.removeAt(index);
     });
+  }
+
+  Future<void> _annotateImage(int index) async {
+    try {
+      final bytes = await _selectedImages[index].readAsBytes();
+      if (!mounted) return;
+      final annotated = await Navigator.of(context).push<Uint8List>(
+        MaterialPageRoute(
+          builder: (_) => ImageAnnotationEditor(imageBytes: bytes),
+          fullscreenDialog: true,
+        ),
+      );
+      if (annotated != null) {
+        // Replace the image with an in-memory annotated version by writing to a temp XFile-like path.
+        // For simplicity, store back as a memory image using a data URI-like hack for demo.
+        final temp = XFile.fromData(annotated, name: 'annotated_$index.png');
+        setState(() => _selectedImages[index] = temp);
+      }
+    } catch (e) {
+      _showErrorSnackBar('Annotation failed: $e');
+    }
   }
 
   void _showImagePickerDialog() {
@@ -174,6 +202,13 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
   void _submitReport() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Require sign-in for submissions
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    if (!auth.isAuthenticated) {
+      context.push('/sign-in?from=/submit-report');
+      return;
+    }
+
     final locationProvider = Provider.of<LocationProvider>(
       context,
       listen: false,
@@ -185,9 +220,7 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
       return;
     }
 
-    if (mounted) {
-      setState(() => _isSubmitting = true);
-    }
+    if (mounted) setState(() => _isSubmitting = true);
 
     try {
       final reportProvider = Provider.of<ReportProvider>(
@@ -252,6 +285,110 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
     );
   }
 
+  Widget _buildDuplicateSuggestionsCard() {
+    final rp = Provider.of<ReportProvider>(context, listen: false);
+    final loc = Provider.of<LocationProvider>(context, listen: false);
+    final all = rp.reports;
+
+    // Simple proximity + keyword match
+    final lat = loc.currentPosition?.latitude;
+    final lng = loc.currentPosition?.longitude;
+
+    bool isNearby(double a, double b) => (a - b).abs() < 0.005; // ~500m
+    bool keywordHit(ReportModel r) {
+      final t = _titleController.text.toLowerCase();
+      if (t.isEmpty) return false;
+      return r.title.toLowerCase().contains(t.split(' ').first);
+    }
+
+    final suggestions = all
+        .where((r) {
+          if (lat == null || lng == null) return false;
+          final near = isNearby(r.latitude, lat) && isNearby(r.longitude, lng);
+          return near || keywordHit(r);
+        })
+        .take(5)
+        .toList();
+
+    if (suggestions.isEmpty) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.grey),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'No likely duplicates near your location. Continue to submit.',
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.warning_amber, color: Colors.orange),
+                SizedBox(width: 8),
+                Text(
+                  'Possible Duplicates Nearby',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'We found a few similar reports near your location. If one matches, you can upvote it instead of creating a new one.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            ...suggestions.map(
+              (r) => ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  r.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text('${r.category} • ${r.status.toUpperCase()}'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  // Open detail preview; user can decide to go back or not
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => EnhancedReportDetailScreen(report: r),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () =>
+                    setState(() => _showDuplicateSuggestions = false),
+                icon: const Icon(Icons.check_circle_outline),
+                label: const Text('Looks good, continue'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -274,6 +411,10 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Step 1: quick duplicate suggestions
+                    if (_showDuplicateSuggestions)
+                      _buildDuplicateSuggestionsCard(),
+                    if (_showDuplicateSuggestions) const SizedBox(height: 16),
                     // Location info
                     Consumer<LocationProvider>(
                       builder: (context, locationProvider, child) {
@@ -299,14 +440,14 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Row(
+                                  const Row(
                                     children: [
                                       Icon(
                                         Icons.location_off,
                                         color: AppTheme.errorRed,
                                       ),
-                                      const SizedBox(width: 8),
-                                      const Text('Location Error'),
+                                      SizedBox(width: 8),
+                                      Text('Location Error'),
                                     ],
                                   ),
                                   const SizedBox(height: 8),
@@ -327,7 +468,7 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
                             padding: const EdgeInsets.all(16),
                             child: Row(
                               children: [
-                                Icon(
+                                const Icon(
                                   Icons.location_on,
                                   color: AppTheme.successGreen,
                                 ),
@@ -371,7 +512,7 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
                     ),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
-                      value: _selectedCategory,
+                      initialValue: _selectedCategory,
                       decoration: const InputDecoration(
                         border: OutlineInputBorder(),
                         contentPadding: EdgeInsets.symmetric(
@@ -472,7 +613,7 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
                           if (_selectedImages.isEmpty)
                             Column(
                               children: [
-                                Icon(
+                                const Icon(
                                   Icons.add_a_photo_outlined,
                                   size: 48,
                                   color: AppTheme.mediumGray,
@@ -532,7 +673,7 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
                                             child: Container(
                                               padding: const EdgeInsets.all(4),
                                               decoration: BoxDecoration(
-                                                color: Colors.black.withOpacity(
+                                                color: Colors.black.withValues(alpha: 
                                                   0.6,
                                                 ),
                                                 borderRadius:
@@ -542,6 +683,45 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
                                                 Icons.close,
                                                 color: Colors.white,
                                                 size: 16,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        Positioned(
+                                          bottom: 4,
+                                          right: 4,
+                                          child: GestureDetector(
+                                            onTap: () => _annotateImage(index),
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 4,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.black.withValues(alpha: 
+                                                  0.6,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                              ),
+                                              child: const Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    Icons.edit,
+                                                    color: Colors.white,
+                                                    size: 14,
+                                                  ),
+                                                  SizedBox(width: 4),
+                                                  Text(
+                                                    'Annotate',
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                             ),
                                           ),
@@ -611,7 +791,7 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
                                   _isUrgent = value;
                                 });
                               },
-                              activeColor: AppTheme.errorRed,
+                              activeThumbColor: AppTheme.errorRed,
                             ),
                           ],
                         ),
@@ -631,7 +811,7 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
                 color: Colors.white,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.grey.withOpacity(0.1),
+                    color: Colors.grey.withValues(alpha: 0.1),
                     spreadRadius: 1,
                     blurRadius: 4,
                     offset: const Offset(0, -2),
@@ -643,7 +823,16 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: _isSubmitting ? null : _submitReport,
+                    onPressed: _isSubmitting
+                        ? null
+                        : () {
+                            // If duplicate step is showing, prompt to confirm next rather than submit
+                            if (_showDuplicateSuggestions) {
+                              setState(() => _showDuplicateSuggestions = false);
+                            } else {
+                              _submitReport();
+                            }
+                          },
                     child: _isSubmitting
                         ? const SizedBox(
                             width: 20,
@@ -653,9 +842,11 @@ class _ReportSubmissionScreenState extends State<ReportSubmissionScreen> {
                               color: Colors.white,
                             ),
                           )
-                        : const Text(
-                            'Submit Report',
-                            style: TextStyle(
+                        : Text(
+                            _showDuplicateSuggestions
+                                ? 'Next'
+                                : 'Submit Report',
+                            style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
                             ),

@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../data/models/evidence_model.dart';
 import '../../data/models/report_model.dart';
 import '../../data/models/vote_model.dart';
 import 'auth_provider.dart';
@@ -16,12 +17,21 @@ class ReportProvider extends ChangeNotifier {
   bool _isLoading = false;
   String _sortBy = 'newest';
   String? _filterByCategory;
+  // Followed report IDs
+  final Set<String> _followedIds = <String>{};
+  // Evidence store (local/demo)
+  final Map<String, List<EvidenceModel>> _evidenceByReport = {};
+  // Votes persistence
+  static const String _votesKey = 'user_votes_v1';
 
   // Getters
   List<ReportModel> get reports => _getFilteredAndSortedReports();
   bool get isLoading => _isLoading;
   String get sortBy => _sortBy;
   String? get filterByCategory => _filterByCategory;
+  Set<String> get followedIds => Set.unmodifiable(_followedIds);
+  List<EvidenceModel> getEvidenceForReport(String reportId) =>
+      List.unmodifiable(_evidenceByReport[reportId] ?? const []);
 
   // Get reports by user ID
   List<ReportModel> getReportsByUserId(String userId) {
@@ -58,6 +68,72 @@ class ReportProvider extends ChangeNotifier {
     return filteredReports;
   }
 
+  // Evidence API (demo local persistence)
+  static const _evidenceKey = 'report_evidence_v1';
+
+  Future<void> addEvidence(EvidenceModel e) async {
+    final list = _evidenceByReport.putIfAbsent(e.reportId, () => []);
+    list.add(e);
+    await _saveEvidence();
+    notifyListeners();
+  }
+
+  Future<void> loadEvidence() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_evidenceKey);
+      if (raw == null) return;
+      final map = (jsonDecode(raw) as Map<String, dynamic>);
+      _evidenceByReport.clear();
+      map.forEach((rid, list) {
+        _evidenceByReport[rid] = (list as List)
+            .map((e) => EvidenceModel.fromJson(e as Map<String, dynamic>))
+            .toList();
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _saveEvidence() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final map = _evidenceByReport.map(
+        (rid, list) => MapEntry(rid, list.map((e) => e.toJson()).toList()),
+      );
+      await prefs.setString(_evidenceKey, jsonEncode(map));
+    } catch (_) {}
+  }
+
+  Future<void> removeEvidence(String reportId, String evidenceId) async {
+    final list = _evidenceByReport[reportId];
+    if (list == null) return;
+    list.removeWhere((e) => e.id == evidenceId);
+    await _saveEvidence();
+    notifyListeners();
+  }
+
+  Future<void> setEvidenceMarkedFake(
+    String reportId,
+    String evidenceId,
+    bool marked,
+  ) async {
+    final list = _evidenceByReport[reportId];
+    if (list == null) return;
+    final idx = list.indexWhere((e) => e.id == evidenceId);
+    if (idx == -1) return;
+    final e = list[idx];
+    list[idx] = EvidenceModel(
+      id: e.id,
+      reportId: e.reportId,
+      userId: e.userId,
+      reason: e.reason,
+      imageBase64: e.imageBase64,
+      markedAsFake: marked,
+      createdAt: e.createdAt,
+    );
+    await _saveEvidence();
+    notifyListeners();
+  }
+
   void setSortBy(String sortBy) {
     _sortBy = sortBy;
     notifyListeners();
@@ -75,6 +151,11 @@ class ReportProvider extends ChangeNotifier {
     try {
       debugPrint('=== LOADING REPORTS ===');
 
+      // Load followed IDs early for UI state
+      await _loadFollowedFromStorage();
+      // Load evidence for persistence
+      await loadEvidence();
+
       // Load both demo reports and user-submitted reports
       _reports = [];
 
@@ -88,6 +169,9 @@ class ReportProvider extends ChangeNotifier {
       _reports.addAll(userReports);
       debugPrint('Loaded ${userReports.length} user reports from storage');
 
+      // Load persisted votes and recompute scores now that reports are present
+      await _loadVotesFromStorage();
+
       // Sort by creation date (newest first)
       _reports.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
@@ -98,6 +182,42 @@ class ReportProvider extends ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
+  }
+
+  // Follow/Unfollow API
+  static const String _followedKey = 'followed_report_ids_v1';
+
+  bool isFollowed(String reportId) => _followedIds.contains(reportId);
+
+  Future<void> toggleFollow(String reportId) async {
+    if (_followedIds.contains(reportId)) {
+      _followedIds.remove(reportId);
+    } else {
+      _followedIds.add(reportId);
+    }
+    notifyListeners();
+    await _saveFollowedToStorage();
+  }
+
+  Future<void> _loadFollowedFromStorage() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final ids = prefs.getStringList(_followedKey) ?? <String>[];
+      _followedIds
+        ..clear()
+        ..addAll(ids);
+    } catch (e) {
+      debugPrint('Error loading followed IDs: $e');
+    }
+  }
+
+  Future<void> _saveFollowedToStorage() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_followedKey, _followedIds.toList());
+    } catch (e) {
+      debugPrint('Error saving followed IDs: $e');
+    }
   }
 
   Future<void> submitReport({
@@ -156,42 +276,115 @@ class ReportProvider extends ChangeNotifier {
 
   Future<void> voteOnReport({
     required String reportId,
+    required String userId,
     required bool isUpvote,
     double voteWeight = 1.0,
     String? reason,
   }) async {
     try {
-      // Check if user already voted
+      // Check if this user already voted on this report
       final existingVoteIndex = _userVotes.indexWhere(
-        (vote) => vote.reportId == reportId,
+        (vote) => vote.reportId == reportId && vote.userId == userId,
       );
 
       if (existingVoteIndex != -1) {
-        // Remove existing vote
-        _userVotes.removeAt(existingVoteIndex);
+        final existing = _userVotes[existingVoteIndex];
+        if (existing.isUpvote == isUpvote) {
+          // Toggling the same choice -> unvote (remove)
+          _userVotes.removeAt(existingVoteIndex);
+        } else {
+          // Switching choice -> replace with new vote
+          _userVotes.removeAt(existingVoteIndex);
+          _userVotes.add(
+            VoteModel(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              userId: userId,
+              reportId: reportId,
+              isUpvote: isUpvote,
+              weight: voteWeight,
+              createdAt: DateTime.now(),
+              reason: reason,
+            ),
+          );
+        }
+      } else {
+        // No existing vote -> add new
+        _userVotes.add(
+          VoteModel(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            userId: userId,
+            reportId: reportId,
+            isUpvote: isUpvote,
+            weight: voteWeight,
+            createdAt: DateTime.now(),
+            reason: reason,
+          ),
+        );
       }
-
-      // Add new vote
-      final vote = VoteModel(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        userId: 'current_user_id',
-        reportId: reportId,
-        isUpvote: isUpvote,
-        weight: voteWeight,
-        createdAt: DateTime.now(),
-        reason: reason,
-      );
-
-      _userVotes.add(vote);
 
       // Update report scores
       _updateReportScores(reportId);
-
+      // Persist votes
+      await _saveVotesToStorage();
       notifyListeners();
     } catch (e) {
       debugPrint('Error voting on report: $e');
       rethrow;
     }
+  }
+
+  // Increment view count for a report (called when a report detail screen is opened)
+  Future<void> incrementViewCount(String reportId) async {
+    final index = _reports.indexWhere((r) => r.id == reportId);
+    if (index == -1) return;
+
+    final r = _reports[index];
+    final updated = ReportModel(
+      id: r.id,
+      userId: r.userId,
+      title: r.title,
+      description: r.description,
+      category: r.category,
+      status: r.status,
+      latitude: r.latitude,
+      longitude: r.longitude,
+      address: r.address,
+      imageUrls: r.imageUrls,
+      videoUrl: r.videoUrl,
+      upvotes: r.upvotes,
+      downvotes: r.downvotes,
+      weightedScore: r.weightedScore,
+      isUrgent: r.isUrgent,
+      isInGracePeriod: r.isInGracePeriod,
+      gracePeriodEnds: r.gracePeriodEnds,
+      createdAt: r.createdAt,
+      updatedAt: DateTime.now(),
+      reporter: r.reporter,
+      assignedAgentId: r.assignedAgentId,
+      assignedAgentName: r.assignedAgentName,
+      assignedAgentPhone: r.assignedAgentPhone,
+      assignedAgentEmail: r.assignedAgentEmail,
+      progressUpdates: r.progressUpdates,
+      viewCount: r.viewCount + 1,
+      priority: r.priority,
+    );
+
+    _reports[index] = updated;
+    notifyListeners();
+
+    // Try to persist if it's a user-submitted report
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final reportsJson = prefs.getString(_userReportsKey);
+      if (reportsJson != null) {
+        final List<dynamic> list = jsonDecode(reportsJson);
+        final i = list.indexWhere((e) => e['id'] == reportId);
+        if (i != -1) {
+          list[i] = updated.toJson();
+          await prefs.setString(_userReportsKey, jsonEncode(list));
+        }
+      }
+    } catch (_) {}
   }
 
   void _updateReportScores(String reportId) {
@@ -240,9 +433,11 @@ class ReportProvider extends ChangeNotifier {
     );
   }
 
-  VoteModel? getUserVoteForReport(String reportId) {
+  VoteModel? getUserVoteForReport(String reportId, String userId) {
     try {
-      return _userVotes.firstWhere((vote) => vote.reportId == reportId);
+      return _userVotes.firstWhere(
+        (vote) => vote.reportId == reportId && vote.userId == userId,
+      );
     } catch (e) {
       return null;
     }
@@ -278,6 +473,18 @@ class ReportProvider extends ChangeNotifier {
         createdAt: DateTime.now().subtract(const Duration(days: 3)),
         updatedAt: DateTime.now().subtract(const Duration(hours: 6)),
         priority: 'high',
+        // Assignment and engagement
+        assignedAgentId: 'agent1',
+        assignedAgentName: 'Tom Wilson',
+        assignedAgentPhone: '+1-555-1001',
+        assignedAgentEmail: 'tom.wilson@springfield.gov',
+        progressUpdates: [
+          'Report received',
+          'Site inspection scheduled',
+          'Repair team assigned',
+        ],
+        // Ensure views > support + oppose
+        viewCount: 60,
       ),
       ReportModel(
         id: 'demo_2',
@@ -300,8 +507,16 @@ class ReportProvider extends ChangeNotifier {
         createdAt: DateTime.now().subtract(const Duration(days: 2)),
         updatedAt: DateTime.now().subtract(const Duration(hours: 4)),
         priority: 'high',
+        assignedAgentId: 'agent2',
         assignedAgentName: 'John Smith',
-        progressUpdates: ['Investigation started', 'Parts ordered'],
+        assignedAgentPhone: '+1-555-1002',
+        assignedAgentEmail: 'john.smith@springfield.gov',
+        progressUpdates: [
+          'Investigation started',
+          'Parts ordered',
+          'Repair scheduled',
+        ],
+        viewCount: 55,
       ),
       ReportModel(
         id: 'demo_3',
@@ -323,6 +538,12 @@ class ReportProvider extends ChangeNotifier {
         createdAt: DateTime.now().subtract(const Duration(hours: 16)),
         updatedAt: DateTime.now().subtract(const Duration(hours: 16)),
         priority: 'medium',
+        assignedAgentId: 'agent3',
+        assignedAgentName: 'Lisa Anderson',
+        assignedAgentPhone: '+1-555-1003',
+        assignedAgentEmail: 'lisa.anderson@springfield.gov',
+        progressUpdates: ['Reported', 'Sanitation team notified'],
+        viewCount: 40,
       ),
       ReportModel(
         id: 'demo_4',
@@ -344,12 +565,16 @@ class ReportProvider extends ChangeNotifier {
         createdAt: DateTime.now().subtract(const Duration(days: 7)),
         updatedAt: DateTime.now().subtract(const Duration(days: 1)),
         priority: 'low',
+        assignedAgentId: 'agent4',
         assignedAgentName: 'Sarah Johnson',
+        assignedAgentPhone: '+1-555-1004',
+        assignedAgentEmail: 'sarah.johnson@springfield.gov',
         progressUpdates: [
           'Report acknowledged',
           'Cleaning scheduled',
           'Graffiti removed',
         ],
+        viewCount: 35,
       ),
       ReportModel(
         id: 'demo_5',
@@ -372,19 +597,51 @@ class ReportProvider extends ChangeNotifier {
         createdAt: DateTime.now().subtract(const Duration(days: 1)),
         updatedAt: DateTime.now().subtract(const Duration(hours: 2)),
         priority: 'urgent',
+        assignedAgentId: 'agent5',
         assignedAgentName: 'Mike Wilson',
         assignedAgentPhone: '(555) 123-4567',
+        assignedAgentEmail: 'mike.wilson@springfield.gov',
         progressUpdates: [
           'Emergency response dispatched',
           'Technician on site',
           'Repair in progress',
         ],
+        viewCount: 90,
       ),
     ];
   }
 
   // Storage methods for user reports persistence
   static const String _userReportsKey = 'user_reports';
+
+  Future<void> _loadVotesFromStorage() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_votesKey);
+      if (raw == null) return;
+      final List<dynamic> list = jsonDecode(raw);
+      _userVotes = list
+          .map((e) => VoteModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+      // Recompute scores for affected reports
+      final affectedReportIds = _userVotes.map((v) => v.reportId).toSet();
+      for (final rid in affectedReportIds) {
+        _updateReportScores(rid);
+      }
+    } catch (e) {
+      debugPrint('Error loading votes from storage: $e');
+    }
+  }
+
+  Future<void> _saveVotesToStorage() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = _userVotes.map((v) => v.toJson()).toList();
+      await prefs.setString(_votesKey, jsonEncode(list));
+    } catch (e) {
+      debugPrint('Error saving votes to storage: $e');
+    }
+  }
 
   Future<void> _saveUserReportToStorage(ReportModel report) async {
     try {

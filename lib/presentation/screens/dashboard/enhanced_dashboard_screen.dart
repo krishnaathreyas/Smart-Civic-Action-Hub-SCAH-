@@ -1,23 +1,31 @@
 // presentation/screens/dashboard/enhanced_dashboard_screen.dart
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart' as flutter_map;
+import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:latlong2/latlong.dart' as ll;
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/report_model.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/comments_provider.dart';
 import '../../providers/location_provider.dart';
 import '../../providers/report_provider.dart';
 import '../../utils/department_stats_generator.dart';
 import '../../widgets/department_charts.dart';
+import '../../widgets/department_stacked_area_chart.dart';
 import '../../widgets/enhanced_report_card.dart';
-import '../../widgets/safe_google_map.dart';
+import '../../widgets/reports_trend_chart.dart';
+// Using flutter_map directly for OSM rendering
 import '../debug_storage_screen.dart';
 import '../report/enhanced_report_detail_screen.dart';
 
 class EnhancedDashboardScreen extends StatefulWidget {
-  const EnhancedDashboardScreen({Key? key}) : super(key: key);
+  const EnhancedDashboardScreen({super.key});
 
   @override
   State<EnhancedDashboardScreen> createState() =>
@@ -30,6 +38,15 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
   String _selectedCategory = 'All';
   String _selectedStatus = 'All';
   String _sortBy = 'Recent';
+  int _timeframeDays = 30; // 7, 30, 90, or 0 for All
+  bool _percentStacked = false;
+  Set<String> _visibleDepartments = {};
+  // Saved filter chips
+  static const _prefsKeySavedFilters = 'saved_filters_v1';
+  List<Map<String, String>> _savedFilters = [];
+  static const _prefsKeyPercent = 'trends_percent_stacked';
+  static const _prefsKeyVisible = 'trends_visible_departments';
+  static const _prefsKeyTimeframe = 'trends_timeframe_days';
 
   final List<String> _categories = [
     'All',
@@ -49,11 +66,15 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
   ];
 
   final List<String> _sortOptions = ['Recent', 'Votes', 'Priority', 'Status'];
+  bool _filterFollowedOnly = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+
+    // Load saved trends preferences
+    _loadTrendPrefs();
 
     // Initialize location and reports on first load
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -81,6 +102,54 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
     super.dispose();
   }
 
+  Future<void> _loadTrendPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final percent = prefs.getBool(_prefsKeyPercent);
+      final visible = prefs.getStringList(_prefsKeyVisible);
+      final tf = prefs.getInt(_prefsKeyTimeframe);
+      if (!mounted) return;
+      setState(() {
+        if (percent != null) _percentStacked = percent;
+        if (visible != null && visible.isNotEmpty) {
+          _visibleDepartments = visible.toSet();
+        }
+        if (tf != null) _timeframeDays = tf;
+        // Load saved filters
+        final saved = prefs.getStringList(_prefsKeySavedFilters);
+        if (saved != null && saved.isNotEmpty) {
+          _savedFilters = saved
+              .map(
+                (s) => Map<String, String>.from(
+                  Map<String, dynamic>.from(
+                    (s.isNotEmpty) ? (jsonDecode(s) as Map) : {},
+                  ),
+                ),
+              )
+              .toList();
+        }
+      });
+    } catch (_) {
+      // ignore prefs errors silently
+    }
+  }
+
+  Future<void> _saveTrendPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_prefsKeyPercent, _percentStacked);
+      await prefs.setStringList(_prefsKeyVisible, _visibleDepartments.toList());
+      await prefs.setInt(_prefsKeyTimeframe, _timeframeDays);
+      // Save filters
+      await prefs.setStringList(
+        _prefsKeySavedFilters,
+        _savedFilters.map((m) => jsonEncode(m)).toList(),
+      );
+    } catch (_) {
+      // ignore prefs errors silently
+    }
+  }
+
   // Check if any filters are active
   bool get _hasActiveFilters =>
       _selectedCategory != 'All' || _selectedStatus != 'All';
@@ -101,6 +170,14 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
       filteredReports = filteredReports.where((report) {
         return report.status.toLowerCase() == _selectedStatus.toLowerCase();
       }).toList();
+    }
+
+    // Filter by followed if toggled
+    final reportProvider = context.read<ReportProvider>();
+    if (_filterFollowedOnly) {
+      filteredReports = filteredReports
+          .where((r) => reportProvider.isFollowed(r.id))
+          .toList();
     }
 
     // Sort reports
@@ -177,7 +254,7 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
               end: Alignment.bottomRight,
               colors: [
                 AppTheme.primaryBlue,
-                AppTheme.primaryBlue.withOpacity(0.8),
+                AppTheme.primaryBlue.withValues(alpha: 0.8),
               ],
             ),
           ),
@@ -210,22 +287,57 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
                         ),
                       ),
                       IconButton(
-                        onPressed: () => _showUserMenu(authProvider),
-                        icon: CircleAvatar(
-                          backgroundColor: Colors.white.withOpacity(0.2),
-                          child: Text(
-                            authProvider.currentUser?.name != null &&
-                                    authProvider.currentUser!.name.isNotEmpty
-                                ? authProvider.currentUser!.name
-                                      .substring(0, 1)
-                                      .toUpperCase()
-                                : 'U',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
+                        onPressed: () {
+                          if (authProvider.isAuthenticated) {
+                            _showUserMenu(authProvider);
+                          } else {
+                            // Navigate to sign in; return to home after
+                            context.push('/sign-in?from=/home');
+                          }
+                        },
+                        icon: authProvider.isAuthenticated
+                            ? CircleAvatar(
+                                backgroundColor: Colors.white.withValues(alpha: 0.2),
+                                child: Text(
+                                  authProvider.currentUser?.name != null &&
+                                          authProvider
+                                              .currentUser!
+                                              .name
+                                              .isNotEmpty
+                                      ? authProvider.currentUser!.name
+                                            .substring(0, 1)
+                                            .toUpperCase()
+                                      : 'U',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              )
+                            : Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.login, color: Colors.white),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      'Sign in',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                       ),
                     ],
                   ),
@@ -312,7 +424,7 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -351,7 +463,7 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _selectedCategory,
+                    initialValue: _selectedCategory,
                     decoration: const InputDecoration(
                       labelText: 'Category',
                       border: OutlineInputBorder(),
@@ -380,7 +492,7 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
                 const SizedBox(width: 12),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _selectedStatus,
+                    initialValue: _selectedStatus,
                     decoration: const InputDecoration(
                       labelText: 'Status',
                       border: OutlineInputBorder(),
@@ -409,8 +521,22 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
               ],
             ),
             const SizedBox(height: 12),
+            // Followed quick filter
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilterChip(
+                label: const Text('Followed'),
+                selected: _filterFollowedOnly,
+                onSelected: (v) {
+                  setState(() => _filterFollowedOnly = v);
+                },
+                selectedColor: AppTheme.primaryBlue.withValues(alpha: 0.18),
+                checkmarkColor: AppTheme.primaryBlue,
+              ),
+            ),
+            const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _sortBy,
+              initialValue: _sortBy,
               decoration: const InputDecoration(
                 labelText: 'Sort By',
                 border: OutlineInputBorder(),
@@ -438,7 +564,7 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
             if (_hasActiveFilters) ...[
               Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.filter_list,
                     color: AppTheme.primaryBlue,
                     size: 20,
@@ -458,6 +584,7 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
                         _selectedCategory = 'All';
                         _selectedStatus = 'All';
                         _sortBy = 'Recent';
+                        _filterFollowedOnly = false;
                       });
                     },
                     child: const Text('Clear All'),
@@ -476,14 +603,54 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
     return Consumer<ReportProvider>(
       builder: (context, reportProvider, child) {
         if (reportProvider.isLoading) {
-          return const Center(
+          // Skeleton loader for list
+          return Padding(
+            padding: const EdgeInsets.all(20),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('Loading reports...'),
-              ],
+              children: List.generate(
+                6,
+                (i) => Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  height: 96,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 96,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade200,
+                          borderRadius: const BorderRadius.horizontal(
+                            left: Radius.circular(12),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              height: 14,
+                              width: 160,
+                              color: Colors.grey.shade200,
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              height: 12,
+                              width: 220,
+                              color: Colors.grey.shade100,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           );
         }
@@ -505,6 +672,38 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Saved filter chips row
+              if (_savedFilters.isNotEmpty) ...[
+                SizedBox(
+                  height: 40,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemBuilder: (ctx, i) {
+                      final f = _savedFilters[i];
+                      final title = f['title'] ?? 'Saved';
+                      return InputChip(
+                        label: Text(title),
+                        onPressed: () {
+                          setState(() {
+                            _selectedCategory = f['category'] ?? 'All';
+                            _selectedStatus = f['status'] ?? 'All';
+                            _sortBy = f['sortBy'] ?? 'Recent';
+                          });
+                        },
+                        onDeleted: () {
+                          setState(() {
+                            _savedFilters.removeAt(i);
+                          });
+                          _saveTrendPrefs();
+                        },
+                      );
+                    },
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemCount: _savedFilters.length,
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               // Show filter results count
               Padding(
                 padding: const EdgeInsets.only(bottom: 16),
@@ -521,11 +720,76 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
                   itemCount: filteredReports.length,
                   itemBuilder: (context, index) {
                     final report = filteredReports[index];
+                    final rp = context.read<ReportProvider>();
+                    final isFollowed = rp.isFollowed(report.id);
+                    final commentsProvider = context.watch<CommentsProvider>();
+                    final commentCount = commentsProvider
+                        .getComments(report.id)
+                        .length;
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 16),
-                      child: EnhancedReportCard(
-                        report: report,
-                        onTap: () => _openReportDetail(report),
+                      child: GestureDetector(
+                        onLongPress: () {
+                          final exists = _savedFilters.any(
+                            (m) =>
+                                (m['category'] ?? 'All') == _selectedCategory &&
+                                (m['status'] ?? 'All') == _selectedStatus &&
+                                (m['sortBy'] ?? 'Recent') == _sortBy,
+                          );
+                          if (exists) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Filter already saved'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                            return;
+                          }
+
+                          final title = '$_selectedCategory · $_selectedStatus';
+                          setState(() {
+                            _savedFilters.add({
+                              'title': title,
+                              'category': _selectedCategory,
+                              'status': _selectedStatus,
+                              'sortBy': _sortBy,
+                            });
+                          });
+                          _saveTrendPrefs();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Saved current filters'),
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                        child: EnhancedReportCard(
+                          report: report,
+                          onTap: () => _openReportDetail(report),
+                          isFollowed: isFollowed,
+                          commentCount: commentCount,
+                          onFollowToggle: () async {
+                            final auth = context.read<AuthProvider>();
+                            if (!auth.isAuthenticated) {
+                              // Require sign in, then return to home
+                              context.push('/sign-in?from=/home');
+                              return;
+                            }
+                            await rp.toggleFollow(report.id);
+                            if (!mounted) return;
+                            setState(() {});
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  rp.isFollowed(report.id)
+                                      ? 'Following report'
+                                      : 'Unfollowed report',
+                                ),
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     );
                   },
@@ -559,7 +823,11 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.location_off, size: 64, color: AppTheme.errorRed),
+                const Icon(
+                  Icons.location_off,
+                  size: 64,
+                  color: AppTheme.errorRed,
+                ),
                 const SizedBox(height: 16),
                 Text(
                   'Location Error',
@@ -586,9 +854,9 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
           );
         }
 
-        // Show Google Maps with current location and report markers
+        // Show map with current location and report markers
         if (locationProvider.currentPosition != null) {
-          return _buildGoogleMap(locationProvider, reportProvider);
+          return _buildOsmMap(locationProvider, reportProvider);
         }
 
         // Default fallback
@@ -606,7 +874,7 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
     );
   }
 
-  Widget _buildGoogleMap(
+  Widget _buildOsmMap(
     LocationProvider locationProvider,
     ReportProvider reportProvider,
   ) {
@@ -614,56 +882,85 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
     final allReports = reportProvider.reports;
     final filteredReports = _getFilteredAndSortedReports(allReports);
 
-    // Create markers for reports
-    final Set<Marker> markers = {
-      // Current location marker
-      Marker(
-        markerId: const MarkerId('current_location'),
-        position: LatLng(currentPosition.latitude, currentPosition.longitude),
-        infoWindow: InfoWindow(
-          title: 'Your Location',
-          snippet: locationProvider.currentAddress ?? 'Current position',
-        ),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
-      ),
-      // Report markers (filtered)
-      ...filteredReports.map(
-        (report) => Marker(
-          markerId: MarkerId(report.id),
-          position: LatLng(report.latitude, report.longitude),
-          infoWindow: InfoWindow(
-            title: report.title,
-            snippet: '${report.category} • ${report.status.toUpperCase()}',
+    // Create OSM markers
+    final markers = <flutter_map.Marker>[];
+    // Report markers
+    for (final report in filteredReports) {
+      markers.add(
+        flutter_map.Marker(
+          point: ll.LatLng(report.latitude, report.longitude),
+          width: 40,
+          height: 40,
+          child: GestureDetector(
             onTap: () => _openReportDetail(report),
-          ),
-          icon: BitmapDescriptor.defaultMarkerWithHue(
-            _getMarkerColor(report.status),
+            child: Icon(
+              Icons.location_on,
+              color: _getOsmMarkerColor(report.status),
+              size: 36,
+            ),
           ),
         ),
+      );
+    }
+    // Current location marker
+    markers.add(
+      flutter_map.Marker(
+        point: ll.LatLng(currentPosition.latitude, currentPosition.longitude),
+        width: 40,
+        height: 40,
+        child: const Icon(Icons.my_location, color: Colors.blue, size: 28),
       ),
-    };
-
-    return SafeGoogleMap(
-      initialCameraPosition: CameraPosition(
-        target: LatLng(currentPosition.latitude, currentPosition.longitude),
-        zoom: 14.0,
+    );
+    // Return FlutterMap with clustering
+    return flutter_map.FlutterMap(
+      options: flutter_map.MapOptions(
+        initialCenter: ll.LatLng(
+          currentPosition.latitude,
+          currentPosition.longitude,
+        ),
+        initialZoom: 14,
       ),
-      markers: markers,
-      myLocationEnabled: true,
-      myLocationButtonEnabled: true,
-      zoomControlsEnabled: true,
-      mapToolbarEnabled: false,
+      children: [
+        flutter_map.TileLayer(
+          urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+          subdomains: const ['a', 'b', 'c'],
+          userAgentPackageName: 'com.example.scah',
+        ),
+        MarkerClusterLayerWidget(
+          options: MarkerClusterLayerOptions(
+            maxClusterRadius: 60,
+            size: const Size(40, 40),
+            markers: markers,
+            builder: (context, clusterMarkers) {
+              return Container(
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade600,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  clusterMarkers.length.toString(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
-  double _getMarkerColor(String status) {
+  Color _getOsmMarkerColor(String status) {
     switch (status.toLowerCase()) {
       case 'resolved':
-        return BitmapDescriptor.hueGreen;
+        return Colors.green;
       case 'in_progress':
-        return BitmapDescriptor.hueOrange;
+        return Colors.orange;
       default:
-        return BitmapDescriptor.hueRed;
+        return Colors.red;
     }
   }
 
@@ -678,7 +975,7 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
+                const Icon(
                   Icons.analytics_outlined,
                   size: 64,
                   color: AppTheme.mediumGray,
@@ -704,19 +1001,213 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
           );
         }
 
-        // Generate department statistics from actual reports
+        // Timeframe filter UI
+        final timeframeChips = Row(
+          children: [
+            _buildTimeframeChip('7D', 7),
+            const SizedBox(width: 8),
+            _buildTimeframeChip('30D', 30),
+            const SizedBox(width: 8),
+            _buildTimeframeChip('90D', 90),
+            const SizedBox(width: 8),
+            _buildTimeframeChip('All', 0),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: () {
+                setState(() {
+                  _timeframeDays = 30;
+                  _percentStacked = false;
+                  // Clear and let seeding logic repopulate on next build
+                  _visibleDepartments.clear();
+                });
+                _saveTrendPrefs();
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('Reset'),
+            ),
+          ],
+        );
+
+        // Apply timeframe filter
+        final now = DateTime.now();
+        final reportsInTimeframe = _timeframeDays == 0
+            ? filteredReports
+            : filteredReports
+                  .where(
+                    (r) => r.createdAt.isAfter(
+                      now.subtract(Duration(days: _timeframeDays)),
+                    ),
+                  )
+                  .toList();
+
+        // Generate department statistics from timeframe-filtered reports
         final departmentStats = DepartmentStatsGenerator.generateStats(
-          filteredReports,
+          reportsInTimeframe,
         );
         final summaryStats = DepartmentStatsGenerator.generateSummaryStats(
-          filteredReports,
+          reportsInTimeframe,
         );
+
+        // Seed visible departments on first render (if empty)
+        if (_visibleDepartments.isEmpty && departmentStats.isNotEmpty) {
+          _visibleDepartments = departmentStats
+              .map((d) => d.department)
+              .toSet();
+        }
 
         return SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Timeframe selector
+              timeframeChips,
+              const SizedBox(height: 16),
+
+              // Reports Trend chart
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withValues(alpha: 0.1),
+                      spreadRadius: 2,
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Reports Trend',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.darkGray,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Daily report counts over selected timeframe',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppTheme.mediumGray,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      height: 240,
+                      child: ReportsTrendChart(
+                        reports: reportsInTimeframe,
+                        timeframeDays: _timeframeDays,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Department Contribution Stacked Area
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withValues(alpha: 0.1),
+                      spreadRadius: 2,
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Department Contribution Over Time',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.darkGray,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // Legend + percent toggle
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        ...departmentStats.map((d) {
+                          final selected = _visibleDepartments.contains(
+                            d.department,
+                          );
+                          return FilterChip(
+                            label: Text(d.department.split(' ').first),
+                            selected: selected,
+                            onSelected: (_) {
+                              setState(() {
+                                if (selected) {
+                                  _visibleDepartments.remove(d.department);
+                                } else {
+                                  _visibleDepartments.add(d.department);
+                                }
+                                if (_visibleDepartments.isEmpty) {
+                                  // Avoid empty -> show all
+                                  _visibleDepartments = departmentStats
+                                      .map((x) => x.department)
+                                      .toSet();
+                                }
+                              });
+                              _saveTrendPrefs();
+                            },
+                            selectedColor: d.color.withValues(alpha: 0.18),
+                            backgroundColor: d.color.withValues(alpha: 0.08),
+                            checkmarkColor: d.color,
+                          );
+                        }),
+                        const SizedBox(width: 12),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Switch(
+                              value: _percentStacked,
+                              onChanged: (v) {
+                                setState(() => _percentStacked = v);
+                                _saveTrendPrefs();
+                              },
+                            ),
+                            const SizedBox(width: 4),
+                            const Text('Percent'),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Stacked area of daily reports by department',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppTheme.mediumGray,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      height: 260,
+                      child: DepartmentStackedAreaChart(
+                        reports: reportsInTimeframe,
+                        timeframeDays: _timeframeDays,
+                        visibleDepartments: _visibleDepartments,
+                        percentMode: _percentStacked,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
               // Summary Cards Section
               Text(
                 'Department Performance Overview',
@@ -818,7 +1309,7 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withValues(alpha: 0.1),
             spreadRadius: 2,
             blurRadius: 4,
             offset: const Offset(0, 2),
@@ -833,7 +1324,7 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(icon, color: color, size: 20),
@@ -874,7 +1365,7 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.report_off, size: 64, color: AppTheme.mediumGray),
+          const Icon(Icons.report_off, size: 64, color: AppTheme.mediumGray),
           const SizedBox(height: 16),
           Text(
             'No Reports Found',
@@ -901,7 +1392,11 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.filter_list_off, size: 64, color: AppTheme.mediumGray),
+          const Icon(
+            Icons.filter_list_off,
+            size: 64,
+            color: AppTheme.mediumGray,
+          ),
           const SizedBox(height: 16),
           Text(
             'No Matching Reports',
@@ -940,6 +1435,31 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
       backgroundColor: AppTheme.primaryBlue,
       icon: const Icon(Icons.add, color: Colors.white),
       label: const Text('New Report', style: TextStyle(color: Colors.white)),
+    );
+  }
+
+  Widget _buildTimeframeChip(String label, int days) {
+    final selected = _timeframeDays == days;
+    return ChoiceChip(
+      label: Text(
+        label,
+        style: TextStyle(
+          color: selected ? Colors.white : AppTheme.darkGray,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      selected: selected,
+      onSelected: (_) {
+        setState(() => _timeframeDays = days);
+        _saveTrendPrefs();
+      },
+      selectedColor: AppTheme.primaryBlue,
+      backgroundColor: Colors.white,
+      shape: StadiumBorder(
+        side: BorderSide(
+          color: selected ? AppTheme.primaryBlue : AppTheme.mediumGray,
+        ),
+      ),
     );
   }
 

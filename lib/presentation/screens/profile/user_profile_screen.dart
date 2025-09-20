@@ -9,7 +9,7 @@ import '../../providers/report_provider.dart';
 import '../report/enhanced_report_detail_screen.dart';
 
 class UserProfileScreen extends StatefulWidget {
-  const UserProfileScreen({Key? key}) : super(key: key);
+  const UserProfileScreen({super.key});
 
   @override
   State<UserProfileScreen> createState() => _UserProfileScreenState();
@@ -468,7 +468,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               ),
               if (report.imageUrls.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                Container(
+                SizedBox(
                   height: 60,
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,

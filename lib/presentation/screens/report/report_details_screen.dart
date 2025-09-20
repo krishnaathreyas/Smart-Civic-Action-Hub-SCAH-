@@ -10,8 +10,7 @@ import '../../providers/report_provider.dart';
 class ReportDetailScreen extends StatefulWidget {
   final String reportId;
 
-  const ReportDetailScreen({Key? key, required this.reportId})
-    : super(key: key);
+  const ReportDetailScreen({super.key, required this.reportId});
 
   @override
   State<ReportDetailScreen> createState() => _ReportDetailScreenState();
@@ -68,7 +67,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                           },
                         )
                       : Container(
-                          decoration: BoxDecoration(
+                          decoration: const BoxDecoration(
                             gradient: LinearGradient(
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
@@ -106,7 +105,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                           ),
                           Text(
                             AppUtils.formatDate(report.createdAt),
-                            style: TextStyle(
+                            style: const TextStyle(
                               color: AppTheme.mediumGray,
                               fontSize: 12,
                             ),

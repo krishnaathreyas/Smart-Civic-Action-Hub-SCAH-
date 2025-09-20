@@ -9,7 +9,8 @@ plugins {
 android {
     namespace = "com.example.scah"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // Pin a known-good NDK version to avoid using a corrupted or unsupported local NDK
+    ndkVersion = "26.1.10909125"
 
     compileOptions {
         isCoreLibraryDesugaringEnabled = true

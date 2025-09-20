@@ -8,8 +8,7 @@ import '../../data/models/department_stats.dart';
 class DepartmentChartsSection extends StatelessWidget {
   final List<DepartmentStats> departmentStats;
 
-  const DepartmentChartsSection({Key? key, required this.departmentStats})
-    : super(key: key);
+  const DepartmentChartsSection({super.key, required this.departmentStats});
 
   @override
   Widget build(BuildContext context) {

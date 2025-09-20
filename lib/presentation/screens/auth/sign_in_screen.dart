@@ -7,7 +7,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 
 class SignInScreen extends StatefulWidget {
-  const SignInScreen({Key? key}) : super(key: key);
+  final String? redirectTo;
+  const SignInScreen({super.key, this.redirectTo});
 
   @override
   State<SignInScreen> createState() => _SignInScreenState();
@@ -47,7 +48,12 @@ class _SignInScreenState extends State<SignInScreen> {
       );
 
       if (mounted && !_isDisposed) {
-        context.go('/home');
+        final target = widget.redirectTo;
+        if (target != null && target.isNotEmpty) {
+          context.go(target);
+        } else {
+          context.go('/home');
+        }
       }
     } catch (e) {
       if (mounted && !_isDisposed) {
@@ -114,7 +120,7 @@ class _SignInScreenState extends State<SignInScreen> {
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     hintText: 'Enter your email',
                     prefixIcon: Icon(
                       Icons.email_outlined,
@@ -150,7 +156,7 @@ class _SignInScreenState extends State<SignInScreen> {
                   obscureText: _obscurePassword,
                   decoration: InputDecoration(
                     hintText: 'Enter your password',
-                    prefixIcon: Icon(
+                    prefixIcon: const Icon(
                       Icons.lock_outlined,
                       color: AppTheme.mediumGray,
                     ),
@@ -214,7 +220,7 @@ class _SignInScreenState extends State<SignInScreen> {
                     onPressed: () {
                       context.go('/welcome');
                     },
-                    child: Text(
+                    child: const Text(
                       'Don\'t have an account? Sign Up',
                       style: TextStyle(
                         color: AppTheme.primaryBlue,

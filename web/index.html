@@ -20,6 +20,11 @@
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="A new Flutter project.">
 
+  <!-- Optional: Provide your Google Maps JavaScript API key here for web builds.
+    You can also set it at runtime via localStorage key 'GOOGLE_MAPS_API_KEY'.
+    For security, do not commit real keys to source control. Leave empty by default. -->
+  <meta name="google-maps-api-key" content="">
+
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -67,9 +72,9 @@
   <title>scah</title>
   <link rel="manifest" href="manifest.json">
   
-  <!-- Google Maps JavaScript API -->
-  <!-- NOTE: For production, replace with your actual API key from Google Cloud Console -->
-  <!-- Get your API key from: https://developers.google.com/maps/documentation/javascript/get-api-key -->
+  <!-- Google Maps JavaScript API (disabled: migrated to OpenStreetMap via flutter_map) -->
+  <!-- Keeping the code commented for reference; remove entirely if not needed. -->
+  <!--
   <script>
     // Enhanced Google Maps initialization with better error handling
     window.google = window.google || {};
@@ -359,6 +364,7 @@
       document.head.appendChild(s);
     })();
   </script>
+  -->
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>

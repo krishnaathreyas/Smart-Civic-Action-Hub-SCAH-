@@ -6,7 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../../core/theme/app_theme.dart';
 
 class PermissionsScreen extends StatefulWidget {
-  const PermissionsScreen({Key? key}) : super(key: key);
+  const PermissionsScreen({super.key});
 
   @override
   State<PermissionsScreen> createState() => _PermissionsScreenState();
