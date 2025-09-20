@@ -9,9 +9,11 @@ import '../../core/constants/app_constants.dart';
 import '../../data/models/evidence_model.dart';
 import '../../data/models/report_model.dart';
 import '../../data/models/vote_model.dart';
+import '../../data/services/civic_report_api_client.dart';
 import 'auth_provider.dart';
 
 class ReportProvider extends ChangeNotifier {
+  final CivicReportApiClient _apiClient = CivicReportApiClient();
   List<ReportModel> _reports = [];
   List<VoteModel> _userVotes = [];
   bool _isLoading = false;
@@ -236,13 +238,28 @@ class ReportProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Get current user from AuthProvider first
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final currentUser = authProvider.currentUser;
 
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 2));
+      // Determine department based on category
+      String department = _getDepartmentForCategory(category);
 
+      // Submit to API
+      await _apiClient.submitReport(
+        title: title,
+        description: description,
+        department: department,
+        category: category,
+        urgency: isUrgent ? 'high' : 'normal',
+        location: {
+          'latitude': latitude,
+          'longitude': longitude,
+          'address': address,
+        },
+        imageUrls: imageUrls,
+      );
+
+      // Add to local state
       final report = ReportModel(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         userId: currentUser?.id ?? 'anonymous',
@@ -272,6 +289,27 @@ class ReportProvider extends ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
+  }
+
+  String _getDepartmentForCategory(String category) {
+    // Map categories to departments
+    switch (category.toLowerCase()) {
+      case 'roads':
+      case 'garbage':
+      case 'parks':
+        return 'BBMP';
+      case 'electricity':
+      case 'power':
+        return 'BESCOM';
+      case 'traffic':
+      case 'accidents':
+        return 'BTP';
+      case 'water':
+      case 'sewage':
+        return 'BWHSP';
+      default:
+        return 'BBMP'; // Default department
+    }
   }
 
   Future<void> voteOnReport({

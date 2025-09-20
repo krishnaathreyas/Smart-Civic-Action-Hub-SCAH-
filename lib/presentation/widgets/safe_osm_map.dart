@@ -1,6 +1,8 @@
 // presentation/widgets/safe_osm_map.dart
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:latlong2/latlong.dart' as ll;
 
 class SafeOSMMap extends StatefulWidget {
@@ -38,10 +40,11 @@ class _SafeOSMMapState extends State<SafeOSMMap> {
       children: [
         // OpenStreetMap tile layer (no API key required)
         TileLayer(
-          urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-          subdomains: const ['a', 'b', 'c'],
+          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
           userAgentPackageName: 'com.example.scah',
-          tileProvider: NetworkTileProvider(),
+          tileProvider: kIsWeb
+              ? CancellableNetworkTileProvider()
+              : NetworkTileProvider(),
           errorImage: const AssetImage(
             'assets/images/placeholder_map_tile.png',
           ),

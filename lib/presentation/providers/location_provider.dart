@@ -1,4 +1,6 @@
 // presentation/providers/location_provider.dart
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
@@ -8,6 +10,7 @@ class LocationProvider extends ChangeNotifier {
   String? _currentAddress;
   bool _isLoading = false;
   String? _error;
+  StreamSubscription<Position>? _positionSub;
 
   // Getters
   Position? get currentPosition => _currentPosition;
@@ -40,10 +43,54 @@ class LocationProvider extends ChangeNotifier {
         throw 'Location permissions are permanently denied, we cannot request permissions.';
       }
 
-      // Get current position
+      // Get current position (initial fix)
       _currentPosition = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 10),
       );
+
+      // If accuracy is poor, attempt to refine with a short live stream
+      if (_currentPosition != null &&
+          (_currentPosition!.accuracy.isNaN ||
+              _currentPosition!.accuracy > 50)) {
+        try {
+          final completer = Completer<Position?>();
+          Position? best = _currentPosition;
+          int received = 0;
+          _positionSub?.cancel();
+          _positionSub =
+              Geolocator.getPositionStream(
+                locationSettings: const LocationSettings(
+                  accuracy: LocationAccuracy.high,
+                  distanceFilter: 0,
+                ),
+              ).listen((pos) {
+                received++;
+                if (best == null || pos.accuracy < best!.accuracy) {
+                  best = pos;
+                  if (pos.accuracy <= 25) {
+                    // Good enough
+                    completer.complete(best);
+                  }
+                }
+                if (received >= 5 && !completer.isCompleted) {
+                  completer.complete(best);
+                }
+              });
+          // Cap wait time
+          final refined = await completer.future.timeout(
+            const Duration(seconds: 8),
+            onTimeout: () => best,
+          );
+          await _positionSub?.cancel();
+          _positionSub = null;
+          if (refined != null) {
+            _currentPosition = refined;
+          }
+        } catch (e) {
+          debugPrint('Refine position failed: $e');
+        }
+      }
 
       // Get address from coordinates
       await _getAddressFromCoordinates();
@@ -63,7 +110,7 @@ class LocationProvider extends ChangeNotifier {
     }
 
     try {
-      List<Placemark> placemarks = await placemarkFromCoordinates(
+      final placemarks = await placemarkFromCoordinates(
         _currentPosition!.latitude,
         _currentPosition!.longitude,
       );
@@ -71,16 +118,29 @@ class LocationProvider extends ChangeNotifier {
       if (placemarks.isNotEmpty) {
         final place = placemarks.first;
         // Build address with null safety
-        final street = place.street ?? 'Unknown Street';
-        final locality = place.locality ?? 'Unknown Area';
-        final adminArea = place.administrativeArea ?? 'Unknown Region';
+        final street = (place.street?.isNotEmpty ?? false)
+            ? place.street
+            : (place.thoroughfare?.isNotEmpty ?? false)
+            ? place.thoroughfare
+            : 'Unknown Street';
+        final locality = (place.locality?.isNotEmpty ?? false)
+            ? place.locality
+            : (place.subAdministrativeArea?.isNotEmpty ?? false)
+            ? place.subAdministrativeArea
+            : 'Unknown Area';
+        final adminArea = (place.administrativeArea?.isNotEmpty ?? false)
+            ? place.administrativeArea
+            : (place.country?.isNotEmpty ?? false)
+            ? place.country
+            : 'Unknown Region';
 
         _currentAddress = '$street, $locality, $adminArea';
       } else {
         _currentAddress = 'Address not found';
       }
     } catch (e) {
-      debugPrint('Error getting address: $e');
+      // On web or when services are unavailable, geocoding can throw
+      debugPrint('Error getting address (non-fatal): $e');
       _currentAddress = 'Address not available';
     }
   }

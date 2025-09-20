@@ -297,7 +297,9 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
                         },
                         icon: authProvider.isAuthenticated
                             ? CircleAvatar(
-                                backgroundColor: Colors.white.withValues(alpha: 0.2),
+                                backgroundColor: Colors.white.withValues(
+                                  alpha: 0.2,
+                                ),
                                 child: Text(
                                   authProvider.currentUser?.name != null &&
                                           authProvider
@@ -922,8 +924,7 @@ class _EnhancedDashboardScreenState extends State<EnhancedDashboardScreen>
       ),
       children: [
         flutter_map.TileLayer(
-          urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-          subdomains: const ['a', 'b', 'c'],
+          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
           userAgentPackageName: 'com.example.scah',
         ),
         MarkerClusterLayerWidget(
